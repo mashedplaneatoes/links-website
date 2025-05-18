@@ -10,59 +10,105 @@ document.addEventListener('DOMContentLoaded', () => {
   const tabButtons = document.querySelectorAll('.tab-button');
   const tabContents = document.querySelectorAll('.tab-content');
   
+  // Initialize Firebase
+  const db = firebase.firestore();
+  
   // Hide the login error initially
-  loginError.style.display = 'none';
+  if (loginError) {
+    loginError.style.display = 'none';
+  }
   
   // Admin authentication state
   let isAdmin = false;
+  
+  // Apply fixed background image on page load
+  applyBackgroundImage();
+  
+  // Function to generate a secure random token
+  function generateSecureToken() {
+    const array = new Uint8Array(16);
+    window.crypto.getRandomValues(array);
+    return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+  }
   
   // Check if admin is already logged in
   checkAdminStatus();
   
   // Handle login form submission
-  loginForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const password = document.getElementById('password').value.trim();
-    
-    if (!password) {
-      showLoginError('Please enter a password');
-      return;
-    }
-    
-    try {
-      // Get the admin document from Firestore
-      const adminDoc = await db.collection('admin').doc('credentials').get();
+  if (loginForm) {
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
       
-      if (!adminDoc.exists) {
-        showLoginError('Admin credentials not set up');
+      const password = document.getElementById('password').value.trim();
+      
+      if (!password) {
+        showLoginError('Please enter a password');
         return;
       }
       
-      const adminData = adminDoc.data();
-      
-      // Compare the password (in a real app, you'd use proper authentication)
-      if (password === adminData.password) {
-        // Login successful
-        localStorage.setItem('isAdmin', 'true');
-        showAdminDashboard();
-        loadLinks();
-        loadSuggestions();
-        setupBackgroundControls(); // Add background controls after login
-      } else {
-        showLoginError('Incorrect password');
+      try {
+        // Get the admin document from Firestore
+        const adminDoc = await db.collection('admin').doc('credentials').get();
+        
+        if (!adminDoc.exists) {
+          showLoginError('Admin credentials not set up');
+          return;
+        }
+        
+        const adminData = adminDoc.data();
+        
+        // Compare the password (in a real app, you'd use proper authentication)
+        if (password === adminData.password) {
+          // Login successful - create secure session
+          const sessionToken = generateSecureToken();
+          
+          // Set secure cookie
+          document.cookie = `adminSession=${sessionToken}; path=/; max-age=3600; SameSite=Strict${location.protocol === 'https:' ? '; Secure' : ''}`;
+          
+          // Store token in Firestore with expiration
+          await db.collection('adminSessions').add({
+            token: sessionToken,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            expiresAt: new Date(Date.now() + 3600000) // 1 hour from now
+          });
+          
+          showAdminDashboard();
+          loadLinks();
+          loadSuggestions();
+        } else {
+          showLoginError('Incorrect password');
+        }
+      } catch (error) {
+        console.error("Login error:", error);
+        showLoginError('Error logging in. Please try again.');
       }
-    } catch (error) {
-      console.error("Login error:", error);
-      showLoginError('Error logging in. Please try again.');
-    }
-  });
+    });
+  }
   
   // Handle logout
-  logoutButton.addEventListener('click', () => {
-    localStorage.removeItem('isAdmin');
-    showLoginForm();
-  });
+  if (logoutButton) {
+    logoutButton.addEventListener('click', async () => {
+      // Clear the session cookie
+      document.cookie = 'adminSession=; path=/; max-age=0; SameSite=Strict';
+      
+      // Delete the session from Firestore
+      try {
+        const token = getSessionToken();
+        if (token) {
+          const sessionsRef = db.collection('adminSessions');
+          const snapshot = await sessionsRef.where('token', '==', token).get();
+          
+          snapshot.forEach(doc => {
+            doc.ref.delete();
+          });
+        }
+      } catch (error) {
+        console.error("Error removing session:", error);
+      }
+      
+      showLoginForm();
+    });
+  }
   
   // Handle tab switching
   tabButtons.forEach(button => {
@@ -82,86 +128,137 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   
   // Handle adding a new link
-  addLinkForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
+  if (addLinkForm) {
+    addLinkForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      if (!isAdmin) {
+        alert('You must be logged in as admin to add links');
+        return;
+      }
+      
+      const name = document.getElementById('link-name').value.trim();
+      const url = document.getElementById('link-url').value.trim();
+      const folder = document.getElementById('link-folder')?.value.trim();
+      const subfolder = document.getElementById('link-subfolder')?.value.trim();
+      const password = document.getElementById('link-password').value.trim();
+      const visible = document.getElementById('link-visible').checked;
+      
+      try {
+        // Add link to Firestore
+        await db.collection('links').add({
+          name,
+          url,
+          folder: folder || null,
+          subfolder: subfolder || null,
+          password: password || null,
+          visible,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        
+        // Reset form and reload links
+        addLinkForm.reset();
+        loadLinks();
+        
+        alert('Link added successfully');
+      } catch (error) {
+        console.error("Error adding link:", error);
+        alert('Error adding link. Please try again.');
+      }
+    });
+  }
+  
+  // Function to get session token from cookies
+  function getSessionToken() {
+    const cookies = document.cookie.split(';').map(c => c.trim());
+    const sessionCookie = cookies.find(c => c.startsWith('adminSession='));
     
-    if (!isAdmin) {
-      alert('You must be logged in as admin to add links');
+    if (!sessionCookie) return null;
+    
+    return sessionCookie.split('=')[1];
+  }
+  
+  // Function to check admin status
+  async function checkAdminStatus() {
+    const token = getSessionToken();
+    
+    if (!token) {
+      isAdmin = false;
+      if (loginSection) {
+        showLoginForm();
+      }
       return;
     }
     
-    const name = document.getElementById('link-name').value.trim();
-    const url = document.getElementById('link-url').value.trim();
-    const folder = document.getElementById('link-folder')?.value.trim();
-    const subfolder = document.getElementById('link-subfolder')?.value.trim();
-    const password = document.getElementById('link-password').value.trim();
-    const visible = document.getElementById('link-visible').checked;
-    
     try {
-      // Add link to Firestore
-      await db.collection('links').add({
-        name,
-        url,
-        folder: folder || null,
-        subfolder: subfolder || null,
-        password: password || null,
-        visible,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
+      // Verify token exists in Firestore and is not expired
+      const snapshot = await db.collection('adminSessions')
+        .where('token', '==', token)
+        .where('expiresAt', '>', new Date())
+        .get();
       
-      // Reset form and reload links
-      addLinkForm.reset();
-      loadLinks();
-      
-      alert('Link added successfully');
+      if (snapshot.empty) {
+        isAdmin = false;
+        if (loginSection) {
+          showLoginForm();
+        }
+      } else {
+        isAdmin = true;
+        if (loginSection && adminDashboard) {
+          showAdminDashboard();
+          loadLinks();
+          loadSuggestions();
+        }
+        
+        // Extend session
+        const sessionDoc = snapshot.docs[0];
+        sessionDoc.ref.update({
+          expiresAt: new Date(Date.now() + 3600000) // extend by 1 hour
+        });
+      }
     } catch (error) {
-      console.error("Error adding link:", error);
-      alert('Error adding link. Please try again.');
-    }
-  });
-  
-  // Function to check admin status
-  function checkAdminStatus() {
-    const adminStatus = localStorage.getItem('isAdmin');
-    
-    if (adminStatus === 'true') {
-      isAdmin = true;
-      showAdminDashboard();
-      loadLinks();
-      loadSuggestions();
-      setupBackgroundControls(); // Add background controls if already logged in
-    } else {
+      console.error("Error checking admin status:", error);
       isAdmin = false;
-      showLoginForm();
+      if (loginSection) {
+        showLoginForm();
+      }
     }
   }
   
   // Function to show login error
   function showLoginError(message) {
-    loginError.textContent = message;
-    loginError.style.display = 'block';
+    if (loginError) {
+      loginError.textContent = message;
+      loginError.style.display = 'block';
+    }
   }
   
   // Function to show login form
   function showLoginForm() {
-    loginSection.classList.remove('hidden');
-    adminDashboard.classList.add('hidden');
-    isAdmin = false;
-    
-    // Hide login error when showing the form
-    loginError.style.display = 'none';
+    if (loginSection && adminDashboard) {
+      loginSection.classList.remove('hidden');
+      adminDashboard.classList.add('hidden');
+      isAdmin = false;
+      
+      // Hide login error when showing the form
+      if (loginError) {
+        loginError.style.display = 'none';
+      }
+    }
   }
   
   // Function to show admin dashboard
   function showAdminDashboard() {
-    loginSection.classList.add('hidden');
-    adminDashboard.classList.remove('hidden');
-    isAdmin = true;
+    if (loginSection && adminDashboard) {
+      loginSection.classList.add('hidden');
+      adminDashboard.classList.remove('hidden');
+      isAdmin = true;
+    }
   }
   
   // Function to load links for admin
   async function loadLinks() {
-    if (!isAdmin) return;
+    if (!isAdmin || !linksList) return;
     
     try {
       const snapshot = await db.collection('links')
@@ -184,7 +281,7 @@ document.addEventListener('DOMContentLoaded', () => {
         linkElement.innerHTML = `
           <h4>
             ${escapeHtml(link.name)}
-            <span class="status-badge">${link.visible ? 'Visible' : 'Hidden'}</span>
+            <span class="status-badge ${link.visible ? 'visible' : 'hidden'}">${link.visible ? 'Visible' : 'Hidden'}</span>
           </h4>
           <p>URL: <a href="${escapeHtml(link.url)}" target="_blank">${escapeHtml(link.url)}</a></p>
           ${link.folder ? `<p>Folder: ${escapeHtml(link.folder)}</p>` : ''}
@@ -197,9 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
         `;
         
-        linksList.appendChild(linkElement);
-        
-        // Add event listeners for edit and delete buttons
+        // Add event listeners for edit and delete
         const editButton = linkElement.querySelector('.edit-button');
         const deleteButton = linkElement.querySelector('.delete-button');
         
@@ -210,6 +305,8 @@ document.addEventListener('DOMContentLoaded', () => {
         deleteButton.addEventListener('click', () => {
           deleteLink(linkId);
         });
+        
+        linksList.appendChild(linkElement);
       });
     } catch (error) {
       console.error("Error loading links:", error);
@@ -219,7 +316,7 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Function to load suggestions
   async function loadSuggestions() {
-    if (!isAdmin) return;
+    if (!isAdmin || !suggestionsList) return;
     
     try {
       const snapshot = await db.collection('suggestions')
@@ -243,7 +340,8 @@ document.addEventListener('DOMContentLoaded', () => {
           <h4>${escapeHtml(suggestion.name)}</h4>
           <p>URL: <a href="${escapeHtml(suggestion.url)}" target="_blank">${escapeHtml(suggestion.url)}</a></p>
           ${suggestion.description ? `<p>Description: ${escapeHtml(suggestion.description)}</p>` : ''}
-          ${suggestion.imageUrl ? `<p>Image URL: <a href="${escapeHtml(suggestion.imageUrl)}" target="_blank">View Image</a></p>` : ''}
+          ${suggestion.imageUrl ? `<p>Image URL: <a href="${escapeHtml(suggestion.imageUrl)}" target="_blank">${escapeHtml(suggestion.imageUrl)}</a></p>` : ''}
+          <p>Submitted: ${suggestion.createdAt ? new Date(suggestion.createdAt.toDate()).toLocaleString() : 'Unknown'}</p>
           
           <div class="admin-actions">
             <button class="approve-button" data-id="${suggestionId}">Approve</button>
@@ -251,9 +349,7 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
         `;
         
-        suggestionsList.appendChild(suggestionElement);
-        
-        // Add event listeners for approve and delete buttons
+        // Add event listeners for approve and delete
         const approveButton = suggestionElement.querySelector('.approve-button');
         const deleteButton = suggestionElement.querySelector('.delete-button');
         
@@ -264,6 +360,8 @@ document.addEventListener('DOMContentLoaded', () => {
         deleteButton.addEventListener('click', () => {
           deleteSuggestion(suggestionId);
         });
+        
+        suggestionsList.appendChild(suggestionElement);
       });
     } catch (error) {
       console.error("Error loading suggestions:", error);
@@ -271,11 +369,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   
+  // Function to apply fixed background image
+  function applyBackgroundImage() {
+    // Set your fixed background image URL here
+    const fixedBackgroundUrl = 'https://your-background-image-url.jpg';
+    
+    document.body.style.backgroundImage = `url(${fixedBackgroundUrl})`;
+    document.body.classList.add('with-bg-image');
+  }
+  
   // Function to edit a link
   function editLink(linkId) {
     if (!isAdmin) return;
     
-    const listItem = document.querySelector(`.admin-list-item:has(.edit-button[data-id="${linkId}"])`);
+    const listItem = document.querySelector(`.admin-list-item:has(button[data-id="${linkId}"])`);
     
     if (!listItem) return;
     
@@ -310,7 +417,7 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
           <div class="form-group">
             <label for="edit-password-${linkId}">Password:</label>
-            <input type="text" id="edit-password-${linkId}" value="${link.password ? escapeHtml(link.password) : ''}">
+                        <input type="text" id="edit-password-${linkId}" value="${link.password ? escapeHtml(link.password) : ''}">
           </div>
           <div class="form-group checkbox">
             <input type="checkbox" id="edit-visible-${linkId}" ${link.visible ? 'checked' : ''}>
@@ -417,7 +524,8 @@ document.addEventListener('DOMContentLoaded', () => {
         alert('Error deleting link. Please try again.');
       });
   }
-    // Function to approve a suggestion
+  
+  // Function to approve a suggestion
   function approveSuggestion(suggestionId) {
     if (!isAdmin) return;
     
@@ -434,8 +542,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return db.collection('links').add({
           name: suggestion.name,
           url: suggestion.url,
-          folder: suggestion.folder || null,
-          subfolder: suggestion.subfolder || null,
           password: null,
           visible: true,
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -474,154 +580,10 @@ document.addEventListener('DOMContentLoaded', () => {
       });
   }
   
-  // Function to set up background image controls
-  function setupBackgroundControls() {
-    if (!isAdmin) return;
-    
-    // Check if settings tab exists, if not create it
-    let settingsTab = document.getElementById('settings-tab');
-    let settingsTabButton = document.querySelector('.tab-button[data-tab="settings"]');
-    
-    if (!settingsTab) {
-      // Create settings tab content
-      settingsTab = document.createElement('div');
-      settingsTab.id = 'settings-tab';
-      settingsTab.className = 'tab-content hidden';
-      
-      // Create settings tab button
-      if (!settingsTabButton) {
-                settingsTabButton = document.createElement('button');
-        settingsTabButton.className = 'tab-button';
-        settingsTabButton.setAttribute('data-tab', 'settings');
-        settingsTabButton.textContent = 'Settings';
-        
-        // Add the button to the tab navigation
-        const tabNav = document.querySelector('.tab-navigation');
-        if (tabNav) {
-          tabNav.appendChild(settingsTabButton);
-          
-          // Add event listener for the new tab button
-          settingsTabButton.addEventListener('click', () => {
-            tabButtons.forEach(btn => btn.classList.remove('active'));
-            settingsTabButton.classList.add('active');
-            
-            tabContents.forEach(content => {
-              content.classList.add('hidden');
-            });
-            settingsTab.classList.remove('hidden');
-          });
-        }
-      }
-      
-      // Add the settings tab to the admin dashboard
-      adminDashboard.appendChild(settingsTab);
-    }
-    
-    // Create background image controls in settings tab
-    const backgroundControls = document.createElement('div');
-    backgroundControls.className = 'settings-section';
-    backgroundControls.innerHTML = `
-      <h3>Background Image</h3>
-      <div class="form-group">
-        <label for="bg-image-url">Background Image URL:</label>
-        <input type="text" id="bg-image-url" placeholder="Enter image URL">
-      </div>
-      <div class="form-actions">
-        <button id="apply-bg" class="primary-button">Apply Background</button>
-        <button id="remove-bg" class="secondary-button">Remove Background</button>
-      </div>
-    `;
-    
-    // Add the controls to the settings tab
-    settingsTab.appendChild(backgroundControls);
-    
-    // Load current background image URL if exists
-    db.collection('settings').doc('appearance').get()
-      .then(doc => {
-        if (doc.exists && doc.data().backgroundImage) {
-          document.getElementById('bg-image-url').value = doc.data().backgroundImage;
-        }
-      })
-      .catch(error => {
-        console.error("Error getting background settings:", error);
-      });
-    
-    // Apply background image
-    document.getElementById('apply-bg').addEventListener('click', () => {
-      const imageUrl = document.getElementById('bg-image-url').value.trim();
-      if (imageUrl) {
-        // Save to Firestore
-        db.collection('settings').doc('appearance').set({
-          backgroundImage: imageUrl
-        }, { merge: true })
-        .then(() => {
-          applyBackgroundImage(imageUrl);
-          alert('Background image updated successfully');
-        })
-        .catch(error => {
-          console.error("Error saving background image:", error);
-          alert('Error saving background image: ' + error.message);
-        });
-      }
-    });
-    
-    // Remove background image
-    document.getElementById('remove-bg').addEventListener('click', () => {
-      // Remove from Firestore
-      db.collection('settings').doc('appearance').update({
-        backgroundImage: firebase.firestore.FieldValue.delete()
-      })
-      .then(() => {
-        document.body.style.backgroundImage = '';
-        document.body.classList.remove('with-bg-image');
-        document.getElementById('bg-image-url').value = '';
-        alert('Background image removed');
-      })
-      .catch(error => {
-        console.error("Error removing background image:", error);
-        alert('Error removing background image: ' + error.message);
-      });
-    });
-    
-    // Allow pressing Enter to apply background
-    document.getElementById('bg-image-url').addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        document.getElementById('apply-bg').click();
-      }
-    });
-  }
-  
-  // Function to apply background image
-  function applyBackgroundImage(customUrl = null) {
-    console.log("Applying background image:", customUrl);
-    
-    // If a custom URL is provided, use it directly
-    if (customUrl) {
-      document.body.style.backgroundImage = `url(${customUrl})`;
-      document.body.classList.add('with-bg-image');
-      return;
-    }
-    
-    // Otherwise fetch from Firestore
-    db.collection('settings').doc('appearance').get()
-      .then(doc => {
-        if (doc.exists && doc.data().backgroundImage) {
-          document.body.style.backgroundImage = `url(${doc.data().backgroundImage})`;
-          document.body.classList.add('with-bg-image');
-          console.log("Applied background from Firestore:", doc.data().backgroundImage);
-        } else {
-          document.body.style.backgroundImage = '';
-          document.body.classList.remove('with-bg-image');
-          console.log("No background image found in Firestore");
-        }
-      })
-      .catch(error => {
-        console.error("Error getting background image:", error);
-      });
-  }
-  
-  // Helper function to escape HTML to prevent XSS
+  // Helper function to escape HTML
   function escapeHtml(unsafe) {
+    if (typeof unsafe !== 'string') return '';
+    
     return unsafe
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -629,13 +591,6 @@ document.addEventListener('DOMContentLoaded', () => {
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
   }
-  
-  // Load background image on page load
-  applyBackgroundImage();
 });
 
-        
-
-  
-  
-
+            
