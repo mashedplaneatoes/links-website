@@ -127,12 +127,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   
-  // Function to show login error
-  function showLoginError(message) {
-    loginError.textContent = message;
-    loginError.style.display = 'block';
+ // Function to show login error
+function showLoginError(message) {
+  loginError.textContent = message;
+  loginError.style.display = 'block';
+}
+
+// Hide error message initially
+document.addEventListener('DOMContentLoaded', () => {
+  const loginError = document.getElementById('login-error');
+  if (loginError) {
+    loginError.style.display = 'none';
   }
-  
+});
+
   // Function to show login form
   function showLoginForm() {
     loginSection.classList.remove('hidden');
