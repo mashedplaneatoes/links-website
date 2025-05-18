@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Links Collection</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <h1>Admin Panel</h1>
+        <nav>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <li><a href="admin.html" class="active">Admin</a></li>
+            </ul>
+        </nav>
+    </header>
+
+
+    <main>
+        <div id="login-section" class="admin-section">
+            <h2>Admin Login</h2>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="password">Admin Password:</label>
+                    <input type="password" id="password" required>
+                </div>
+                <button type="submit">Login</button>
+                <p id="login-error" class="error-message"></p>
+            </form>
+        </div>
+
+
+        <div id="admin-dashboard" class="admin-section hidden">
+            <h2>Manage Links</h2>
+            
+            <div class="admin-tabs">
+                <button class="tab-button active" data-tab="links">Manage Links</button>
+                <button class="tab-button" data-tab="suggestions">Review Suggestions</button>
+                <button id="logout-button">Logout</button>
+            </div>
+            
+            <div id="links-tab" class="tab-content">
+                <h3>Add New Link</h3>
+                <form id="add-link-form">
+                    <div class="form-group">
+                        <label for="link-name">Name:</label>
+                        <input type="text" id="link-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="link-url">URL:</label>
+                        <input type="url" id="link-url" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="link-password">Password (leave empty for no password):</label>
+                        <input type="text" id="link-password">
+                    </div>
+                    <div class="form-group checkbox">
+                        <input type="checkbox" id="link-visible" checked>
+                        <label for="link-visible">Visible</label>
+                    </div>
+                    <button type="submit">Add Link</button>
+                </form>
+
+
+                <h3>Existing Links</h3>
+                <div id="links-list" class="admin-list">
+                    <!-- Links will be loaded here -->
+                    <p class="loading-message">Loading links...</p>
+                </div>
+            </div>
+            
+            <div id="suggestions-tab" class="tab-content hidden">
+                <h3>User Suggestions</h3>
+                <div id="suggestions-list" class="admin-list">
+                    <!-- Suggestions will be loaded here -->
+                    <p class="loading-message">Loading suggestions...</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+
+    <footer>
+        <p>&copy; 2023 Links Collection</p>
+    </footer>
+
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <script src="js/firebase-config.js"></script>
+    <script src="js/admin.js"></script>
+</body>
+</html>
