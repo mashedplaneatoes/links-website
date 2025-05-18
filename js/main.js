@@ -1,207 +1,358 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const linksContainer = document.getElementById('links-container');
+  // Initialize Firebase
+  const db = firebase.firestore();
   
-  // Function to fetch and display links
-  async function loadLinks() {
-    try {
-      // Get links from Firestore
-      const snapshot = await db.collection('links')
-        .where('visible', '==', true)
-        .get();
-      
-      if (snapshot.empty) {
-        linksContainer.innerHTML = '<p>No links available.</p>';
-        return;
-      }
-      
-      // Clear loading message
-      linksContainer.innerHTML = '';
-      
-      // Organize links by folder
-      const folders = {};
-      const rootLinks = [];
-      
-      snapshot.forEach(doc => {
-        const link = doc.data();
-        link.id = doc.id;
+  // Get DOM elements
+  const linksContainer = document.getElementById('links-container');
+  const searchInput = document.getElementById('search-input');
+  const suggestionForm = document.getElementById('suggestion-form');
+  
+  // Store passwords that have been entered correctly
+  const unlockedFolders = new Set();
+  
+  // Load links from Firestore
+  function loadLinks() {
+    db.collection('links')
+      .where('visible', '==', true)
+      .get()
+      .then(snapshot => {
+        // Process links
+        const links = [];
+        snapshot.forEach(doc => {
+          const link = doc.data();
+          link.id = doc.id;
+          links.push(link);
+        });
         
-        if (link.folder) {
-          // Add to folder
-          if (!folders[link.folder]) {
-            folders[link.folder] = {
-              name: link.folder,
-              links: [],
-              subfolders: {}
-            };
-          }
-          
-          // Check if it belongs in a subfolder
-          if (link.subfolder) {
-            if (!folders[link.folder].subfolders[link.subfolder]) {
-              folders[link.folder].subfolders[link.subfolder] = {
-                name: link.subfolder,
+        // Organize links by folder and subfolder
+        const folders = {};
+        const noFolderLinks = [];
+        
+        links.forEach(link => {
+          if (link.folder) {
+            if (!folders[link.folder]) {
+              folders[link.folder] = {
+                name: link.folder,
+                subfolders: {},
                 links: []
               };
             }
-            folders[link.folder].subfolders[link.subfolder].links.push(link);
+            
+            if (link.subfolder) {
+              if (!folders[link.folder].subfolders[link.subfolder]) {
+                folders[link.folder].subfolders[link.subfolder] = {
+                  name: link.subfolder,
+                  links: []
+                };
+              }
+              folders[link.folder].subfolders[link.subfolder].links.push(link);
+            } else {
+              folders[link.folder].links.push(link);
+            }
           } else {
-            folders[link.folder].links.push(link);
+            noFolderLinks.push(link);
           }
-        } else {
-          // Add to root
-          rootLinks.push(link);
-        }
-      });
-      
-      // Display folders first
-      for (const folderName in folders) {
-        const folder = folders[folderName];
-        const folderElement = document.createElement('div');
-        folderElement.className = 'folder';
-        
-        // Create folder header
-        const folderHeader = document.createElement('div');
-        folderHeader.className = 'folder-header';
-        folderHeader.innerHTML = `
-          <h3>${folder.name}</h3>
-          <span class="folder-toggle">▼</span>
-        `;
-        folderElement.appendChild(folderHeader);
-        
-        // Create folder content
-        const folderContent = document.createElement('div');
-        folderContent.className = 'folder-content';
-        
-        // Add links in this folder
-        folder.links.forEach(link => {
-          folderContent.appendChild(createLinkCard(link));
         });
         
-        // Add subfolders
-        for (const subfolderName in folder.subfolders) {
-          const subfolder = folder.subfolders[subfolderName];
-          const subfolderElement = document.createElement('div');
-          subfolderElement.className = 'subfolder';
+        // Clear links container
+        linksContainer.innerHTML = '';
+        
+        // Add folders
+        Object.values(folders).forEach(folder => {
+          const folderElement = document.createElement('div');
+          folderElement.className = 'folder';
           
-          // Create subfolder header
-          const subfolderHeader = document.createElement('div');
-          subfolderHeader.className = 'folder-header';
-          subfolderHeader.innerHTML = `
-            <h3>${subfolder.name}</h3>
-            <span class="folder-toggle">▼</span>
+          const folderHeader = document.createElement('div');
+          folderHeader.className = 'folder-header';
+          folderHeader.innerHTML = `
+            <span class="folder-name">${folder.name}</span>
+            <span class="folder-arrow">▶</span>
           `;
-          subfolderElement.appendChild(subfolderHeader);
           
-          // Create subfolder content
-          const subfolderContent = document.createElement('div');
-          subfolderContent.className = 'folder-content';
+          const folderContent = document.createElement('div');
+          folderContent.className = 'folder-content hidden';
           
-          // Add links in this subfolder
-          subfolder.links.forEach(link => {
-            subfolderContent.appendChild(createLinkCard(link));
+          // Add folder password protection if needed
+          const folderPassword = getFolderPassword(folder);
+          const isLocked = folderPassword && !unlockedFolders.has(folder.name);
+          
+          if (isLocked) {
+            // Create password form
+            const passwordForm = document.createElement('div');
+            passwordForm.className = 'password-form';
+            passwordForm.innerHTML = `
+              <p>This folder is password protected</p>
+              <div class="password-input-group">
+                <input type="password" class="folder-password-input" placeholder="Enter password">
+                <button type="button" class="unlock-button">Unlock</button>
+              </div>
+              <p class="password-error hidden">Incorrect password</p>
+            `;
+            
+            folderContent.appendChild(passwordForm);
+            
+            // Add unlock button event listener
+            const unlockButton = passwordForm.querySelector('.unlock-button');
+            const passwordInput = passwordForm.querySelector('.folder-password-input');
+            const passwordError = passwordForm.querySelector('.password-error');
+            
+            unlockButton.addEventListener('click', () => {
+              const enteredPassword = passwordInput.value.trim();
+              
+              if (enteredPassword === folderPassword) {
+                // Password correct, show folder contents
+                unlockedFolders.add(folder.name);
+                folderContent.innerHTML = ''; // Clear password form
+                renderFolderContents(folder, folderContent);
+              } else {
+                // Password incorrect, show error
+                passwordError.classList.remove('hidden');
+              }
+            });
+            
+            // Also allow pressing Enter to submit
+            passwordInput.addEventListener('keypress', (e) => {
+              if (e.key === 'Enter') {
+                unlockButton.click();
+              }
+            });
+          } else {
+            // No password or already unlocked, render contents directly
+            renderFolderContents(folder, folderContent);
+          }
+          
+          // Toggle folder content visibility when header is clicked
+          folderHeader.addEventListener('click', () => {
+            // Only toggle if unlocked or no password
+            if (!isLocked || unlockedFolders.has(folder.name)) {
+              folderContent.classList.toggle('hidden');
+              const arrow = folderHeader.querySelector('.folder-arrow');
+              arrow.textContent = folderContent.classList.contains('hidden') ? '▶' : '▼';
+            } else {
+              folderContent.classList.toggle('hidden');
+              const arrow = folderHeader.querySelector('.folder-arrow');
+              arrow.textContent = folderContent.classList.contains('hidden') ? '▶' : '▼';
+            }
           });
           
-          subfolderElement.appendChild(subfolderContent);
-          folderContent.appendChild(subfolderElement);
+          folderElement.appendChild(folderHeader);
+          folderElement.appendChild(folderContent);
+          linksContainer.appendChild(folderElement);
+        });
+        
+        // Add links with no folder
+        if (noFolderLinks.length > 0) {
+          const noFolderSection = document.createElement('div');
+          noFolderSection.className = 'no-folder-section';
           
-          // Add toggle functionality to subfolder
-          subfolderHeader.addEventListener('click', (e) => {
-            e.stopPropagation(); // Prevent triggering parent folder toggle
-            subfolderContent.style.display = subfolderContent.style.display === 'none' ? 'block' : 'none';
-            subfolderHeader.querySelector('.folder-toggle').textContent = 
-              subfolderContent.style.display === 'none' ? '▶' : '▼';
+          noFolderLinks.forEach(link => {
+            const linkElement = createLinkElement(link);
+            noFolderSection.appendChild(linkElement);
           });
+          
+          linksContainer.appendChild(noFolderSection);
         }
         
-        folderElement.appendChild(folderContent);
-        linksContainer.appendChild(folderElement);
-        
-        // Add toggle functionality to folder
-        folderHeader.addEventListener('click', () => {
-          folderContent.style.display = folderContent.style.display === 'none' ? 'block' : 'none';
-          folderHeader.querySelector('.folder-toggle').textContent = 
-            folderContent.style.display === 'none' ? '▶' : '▼';
-        });
-      }
-      
-      // Display root links
-      if (rootLinks.length > 0) {
-        const rootElement = document.createElement('div');
-        rootElement.className = 'links-container';
-        
-        rootLinks.forEach(link => {
-          rootElement.appendChild(createLinkCard(link));
-        });
-        
-        linksContainer.appendChild(rootElement);
-      }
-    } catch (error) {
-      console.error("Error loading links:", error);
-      linksContainer.innerHTML = '<p class="error-message">Error loading links. Please try again later.</p>';
-    }
+        // Initialize search functionality
+        initSearch();
+      })
+      .catch(error => {
+        console.error('Error loading links:', error);
+        linksContainer.innerHTML = '<p class="error-message">Error loading links. Please try again later.</p>';
+      });
   }
   
-  // Function to create a link card
-  function createLinkCard(link) {
-    const linkElement = document.createElement('div');
-    linkElement.className = 'link-card';
-    
-    if (link.password) {
-      // Password protected link
-      linkElement.innerHTML = `
-        <h3>${link.name}</h3>
-        <p class="password-protected">🔒 This link is password protected</p>
-        <div class="password-form">
-          <input type="password" placeholder="Enter password" id="password-${link.id}" class="password-input">
-          <button onclick="unlockLink('${link.id}')">Unlock</button>
-        </div>
-      `;
-    } else {
-      // Regular link
-      linkElement.innerHTML = `
-        <h3>${link.name}</h3>
-        <a href="${link.url}" target="_blank">Visit Link</a>
-      `;
+  // Helper function to get folder password
+  function getFolderPassword(folder) {
+    // Check if any link in the folder has a password
+    const folderLinks = folder.links;
+    for (const link of folderLinks) {
+      if (link.password) {
+        return link.password;
+      }
     }
     
+    // Check subfolders
+    for (const subfolder of Object.values(folder.subfolders)) {
+      for (const link of subfolder.links) {
+        if (link.password) {
+          return link.password;
+        }
+      }
+    }
+    
+    return null;
+  }
+  
+  // Helper function to render folder contents
+  function renderFolderContents(folder, folderContent) {
+    // Add folder links
+    folder.links.forEach(link => {
+      const linkElement = createLinkElement(link);
+      folderContent.appendChild(linkElement);
+    });
+    
+    // Add subfolders
+    Object.values(folder.subfolders).forEach(subfolder => {
+      const subfolderElement = document.createElement('div');
+      subfolderElement.className = 'subfolder';
+      
+      const subfolderHeader = document.createElement('div');
+      subfolderHeader.className = 'subfolder-header';
+      subfolderHeader.innerHTML = `
+        <span class="subfolder-name">${subfolder.name}</span>
+        <span class="subfolder-arrow">▶</span>
+      `;
+      
+      const subfolderContent = document.createElement('div');
+      subfolderContent.className = 'subfolder-content hidden';
+      
+      // Add subfolder links
+      subfolder.links.forEach(link => {
+        const linkElement = createLinkElement(link);
+        subfolderContent.appendChild(linkElement);
+      });
+      
+      // Toggle subfolder content visibility when header is clicked
+      subfolderHeader.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent triggering parent folder toggle
+        subfolderContent.classList.toggle('hidden');
+        const arrow = subfolderHeader.querySelector('.subfolder-arrow');
+        arrow.textContent = subfolderContent.classList.contains('hidden') ? '▶' : '▼';
+      });
+      
+      subfolderElement.appendChild(subfolderHeader);
+      subfolderElement.appendChild(subfolderContent);
+      folderContent.appendChild(subfolderElement);
+    });
+  }
+  
+  // Helper function to create a link element
+  function createLinkElement(link) {
+    const linkElement = document.createElement('div');
+    linkElement.className = 'link-item';
+    linkElement.innerHTML = `
+      <a href="${link.url}" target="_blank" rel="noopener noreferrer" class="link-name">${link.name}</a>
+    `;
     return linkElement;
   }
   
-  // Function to unlock password-protected links
-  window.unlockLink = async function(linkId) {
-    const passwordInput = document.getElementById(`password-${linkId}`);
-    const password = passwordInput.value.trim();
+  // Initialize search functionality
+  function initSearch() {
+    if (!searchInput) return;
     
-    if (!password) {
-      alert('Please enter a password');
-      return;
-    }
-    
-    try {
-      const doc = await db.collection('links').doc(linkId).get();
+    searchInput.addEventListener('input', () => {
+      const searchTerm = searchInput.value.trim().toLowerCase();
       
-      if (!doc.exists) {
-        alert('Link not found');
+      // Get all link items
+      const linkItems = document.querySelectorAll('.link-item');
+      
+      // Get all folders and subfolders
+      const folders = document.querySelectorAll('.folder');
+      const subfolders = document.querySelectorAll('.subfolder');
+      
+      if (searchTerm === '') {
+        // If search is empty, reset everything
+        linkItems.forEach(item => {
+          item.style.display = '';
+        });
+        
+        folders.forEach(folder => {
+          folder.style.display = '';
+          folder.querySelector('.folder-content').classList.add('hidden');
+          folder.querySelector('.folder-arrow').textContent = '▶';
+        });
+        
+        subfolders.forEach(subfolder => {
+          subfolder.style.display = '';
+          subfolder.querySelector('.subfolder-content').classList.add('hidden');
+          subfolder.querySelector('.subfolder-arrow').textContent = '▶';
+        });
+      } else {
+        // Filter links
+        let hasVisibleLinks = false;
+        
+        linkItems.forEach(item => {
+          const linkName = item.querySelector('.link-name').textContent.toLowerCase();
+          if (linkName.includes(searchTerm)) {
+            item.style.display = '';
+            hasVisibleLinks = true;
+            
+            // Show parent folder and subfolder
+            const parentSubfolder = item.closest('.subfolder');
+            const parentFolder = item.closest('.folder');
+            
+            if (parentSubfolder) {
+              parentSubfolder.style.display = '';
+              parentSubfolder.querySelector('.subfolder-content').classList.remove('hidden');
+              parentSubfolder.querySelector('.subfolder-arrow').textContent = '▼';
+            }
+            
+            if (parentFolder) {
+              parentFolder.style.display = '';
+              parentFolder.querySelector('.folder-content').classList.remove('hidden');
+              parentFolder.querySelector('.folder-arrow').textContent = '▼';
+            }
+          } else {
+            item.style.display = 'none';
+          }
+        });
+        
+        // Hide empty folders and subfolders
+        folders.forEach(folder => {
+          const folderContent = folder.querySelector('.folder-content');
+          const visibleLinks = Array.from(folderContent.querySelectorAll('.link-item')).filter(link => link.style.display !== 'none');
+          const visibleSubfolders = Array.from(folderContent.querySelectorAll('.subfolder')).filter(subfolder => subfolder.style.display !== 'none');
+          
+          if (visibleLinks.length === 0 && visibleSubfolders.length === 0) {
+            folder.style.display = 'none';
+          }
+        });
+      }
+    });
+  }
+  
+  // Handle suggestion form submission
+  if (suggestionForm) {
+    suggestionForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      
+      const nameInput = document.getElementById('suggestion-name');
+      const urlInput = document.getElementById('suggestion-url');
+      const descriptionInput = document.getElementById('suggestion-description');
+      const imageUrlInput = document.getElementById('suggestion-image-url');
+      
+      const name = nameInput.value.trim();
+      const url = urlInput.value.trim();
+      const description = descriptionInput.value.trim();
+      const imageUrl = imageUrlInput.value.trim();
+      
+      if (!name || !url) {
+        alert('Please enter a name and URL for your suggestion.');
         return;
       }
       
-      const link = doc.data();
-      
-      if (password === link.password) {
-        // Password is correct, show the link
-        const linkCard = passwordInput.closest('.link-card');
-        linkCard.innerHTML = `
-          <h3>${link.name}</h3>
-          <a href="${link.url}" target="_blank">Visit Link</a>
-        `;
-      } else {
-        alert('Incorrect password');
-      }
-    } catch (error) {
-      console.error("Error unlocking link:", error);
-      alert('Error unlocking link. Please try again.');
-    }
-  };
+      // Add suggestion to Firestore
+      db.collection('suggestions').add({
+        name,
+        url,
+        description: description || null,
+        imageUrl: imageUrl || null,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      })
+      .then(() => {
+        // Reset form
+        suggestionForm.reset();
+        
+        // Show success message
+        alert('Thank you for your suggestion! It will be reviewed by the admin.');
+      })
+      .catch(error => {
+        console.error('Error adding suggestion:', error);
+        alert('Error submitting suggestion. Please try again later.');
+      });
+    });
+  }
   
   // Load links when page loads
   loadLinks();
