@@ -45,7 +45,6 @@ document.addEventListener('DOMContentLoaded', () => {
   function verifyAdminPassword(password) {
     console.log("Verifying password...");
     
-    // For testing purposes, let's add a console log to see if we're getting the credentials document
     db.collection('admin').doc('credentials').get()
       .then(doc => {
         console.log("Got credentials document:", doc.exists);
@@ -258,8 +257,11 @@ document.addEventListener('DOMContentLoaded', () => {
   window.editLink = function(linkId) {
     if (!isAdmin) return;
     
-    const listItem = document.querySelector(`.admin-list-item button[onclick="editLink('${linkId}')"]`).closest('.admin-list-item');
+    // Find the list item using a more reliable method
+    const editButton = document.querySelector(`button.edit-button[onclick*="${linkId}"]`);
+    if (!editButton) return;
     
+    const listItem = editButton.closest('.admin-list-item');
     if (!listItem) return;
     
     db.collection('links').doc(linkId).get()
@@ -354,8 +356,11 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Function to cancel edit
   window.cancelEdit = function(linkId) {
-    const listItem = document.querySelector(`.admin-list-item button[onclick="saveLink('${linkId}')"]`).closest('.admin-list-item');
+    // Find the save button and get the list item
+    const saveButton = document.querySelector(`button[onclick*="saveLink('${linkId}')"]`);
+    if (!saveButton) return;
     
+    const listItem = saveButton.closest('.admin-list-item');
     if (!listItem) return;
     
     // Remove edit form
@@ -453,4 +458,3 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
   
- 
