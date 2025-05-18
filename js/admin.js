@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Hide error message initially
   if (loginError) {
-    loginError.style.display = 'none';
+    loginError.classList.add('hidden');
   }
   
   // Track admin status
@@ -25,38 +25,49 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   // Handle login form submission
-  loginForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    
-    const password = document.getElementById('admin-password').value.trim();
-    
-    if (!password) {
-      showLoginError('Please enter a password');
-      return;
-    }
-    
-    verifyAdminPassword(password);
-  });
+  if (loginForm) {
+    loginForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      console.log("Login form submitted");
+      
+      const password = document.getElementById('admin-password').value.trim();
+      
+      if (!password) {
+        showLoginError('Please enter a password');
+        return;
+      }
+      
+      verifyAdminPassword(password);
+    });
+  }
   
   // Function to verify admin password
   function verifyAdminPassword(password) {
+    console.log("Verifying password...");
+    
+    // For testing purposes, let's add a console log to see if we're getting the credentials document
     db.collection('admin').doc('credentials').get()
       .then(doc => {
+        console.log("Got credentials document:", doc.exists);
+        
         if (!doc.exists) {
           showLoginError('Admin credentials not found');
           return;
         }
         
         const credentials = doc.data();
+        console.log("Comparing passwords...");
         
         if (password === credentials.password) {
           // Password is correct, show admin panel
+          console.log("Password correct!");
           isAdmin = true;
           localStorage.setItem('adminPassword', password);
           showAdminPanel();
           loadLinks();
           loadSuggestions();
         } else {
+          console.log("Password incorrect!");
           showLoginError('Incorrect password');
           localStorage.removeItem('adminPassword');
         }
@@ -69,14 +80,20 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Function to show login error
   function showLoginError(message) {
-    loginError.textContent = message;
-    loginError.style.display = 'block';
+    console.log("Showing login error:", message);
+    if (loginError) {
+      loginError.textContent = message;
+      loginError.classList.remove('hidden');
+    }
   }
   
   // Function to show admin panel
   function showAdminPanel() {
-    adminLogin.classList.add('hidden');
-    adminPanel.classList.remove('hidden');
+    console.log("Showing admin panel");
+    if (adminLogin && adminPanel) {
+      adminLogin.classList.add('hidden');
+      adminPanel.classList.remove('hidden');
+    }
   }
   
   // Handle tab switching
@@ -105,47 +122,49 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   
   // Handle adding a new link
-  addLinkForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    if (!isAdmin) {
-      alert('You must be logged in as admin to add links');
-      return;
-    }
-    
-    const name = document.getElementById('link-name').value.trim();
-    const url = document.getElementById('link-url').value.trim();
-    const password = document.getElementById('link-password').value.trim();
-    const visible = document.getElementById('link-visible').checked;
-    const folder = document.getElementById('link-folder').value.trim();
-    const subfolder = document.getElementById('link-subfolder').value.trim();
-    
-    try {
-      // Add link to Firestore
-      await db.collection('links').add({
-        name,
-        url,
-        password: password || null,
-        visible,
-        folder: folder || null,
-        subfolder: subfolder || null,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
+  if (addLinkForm) {
+    addLinkForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
       
-      // Reset form and reload links
-      addLinkForm.reset();
-      loadLinks();
+      if (!isAdmin) {
+        alert('You must be logged in as admin to add links');
+        return;
+      }
       
-      alert('Link added successfully');
-    } catch (error) {
-      console.error("Error adding link:", error);
-      alert('Error adding link. Please try again.');
-    }
-  });
+      const name = document.getElementById('link-name').value.trim();
+      const url = document.getElementById('link-url').value.trim();
+      const password = document.getElementById('link-password').value.trim();
+      const visible = document.getElementById('link-visible').checked;
+      const folder = document.getElementById('link-folder').value.trim();
+      const subfolder = document.getElementById('link-subfolder').value.trim();
+      
+      try {
+        // Add link to Firestore
+        await db.collection('links').add({
+          name,
+          url,
+          password: password || null,
+          visible,
+          folder: folder || null,
+          subfolder: subfolder || null,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        
+        // Reset form and reload links
+        addLinkForm.reset();
+        loadLinks();
+        
+        alert('Link added successfully');
+      } catch (error) {
+        console.error("Error adding link:", error);
+        alert('Error adding link. Please try again.');
+      }
+    });
+  }
   
   // Function to load links
   async function loadLinks() {
-    if (!isAdmin) return;
+    if (!isAdmin || !linksList) return;
     
     linksList.innerHTML = '<p class="loading-message">Loading links...</p>';
     
@@ -193,7 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Function to load suggestions
   async function loadSuggestions() {
-    if (!isAdmin) return;
+    if (!isAdmin || !suggestionsList) return;
     
     suggestionsList.innerHTML = '<p class="loading-message">Loading suggestions...</p>';
     
@@ -239,7 +258,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.editLink = function(linkId) {
     if (!isAdmin) return;
     
-    const listItem = document.querySelector(`.admin-list-item:has(button[onclick="editLink('${linkId}')"])`);
+    const listItem = document.querySelector(`.admin-list-item button[onclick="editLink('${linkId}')"]`).closest('.admin-list-item');
     
     if (!listItem) return;
     
@@ -335,7 +354,7 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Function to cancel edit
   window.cancelEdit = function(linkId) {
-    const listItem = document.querySelector(`.admin-list-item:has(button[onclick="saveLink('${linkId}')"])`);
+    const listItem = document.querySelector(`.admin-list-item button[onclick="saveLink('${linkId}')"]`).closest('.admin-list-item');
     
     if (!listItem) return;
     
@@ -408,8 +427,7 @@ document.addEventListener('DOMContentLoaded', () => {
         alert('Error approving suggestion. Please try again.');
       });
   };
-  
-  // Function to delete a suggestion
+    // Function to delete a suggestion
   window.deleteSuggestion = function(suggestionId) {
     if (!isAdmin) return;
     
@@ -426,4 +444,13 @@ document.addEventListener('DOMContentLoaded', () => {
         alert('Error deleting suggestion. Please try again.');
       });
   };
+
+  // Add console logs to help debug
+  console.log("Admin.js loaded");
+  console.log("Login form exists:", !!loginForm);
+  console.log("Admin login section exists:", !!adminLogin);
+  console.log("Admin panel exists:", !!adminPanel);
 });
+
+  
+ 
