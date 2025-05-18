@@ -1,412 +1,406 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const loginSection = document.getElementById('login-section');
-  const adminDashboard = document.getElementById('admin-dashboard');
-  const loginForm = document.getElementById('login-form');
-  const loginError = document.getElementById('login-error');
-  const logoutButton = document.getElementById('logout-button');
-  const addLinkForm = document.getElementById('add-link-form');
-  const linksList = document.getElementById('links-list');
-  const suggestionsList = document.getElementById('suggestions-list');
-  const tabButtons = document.querySelectorAll('.tab-button');
-  const tabContents = document.querySelectorAll('.tab-content');
+  // Initialize Firebase
+  const db = firebase.firestore();
   
-  // Admin authentication state
-  let isAdmin = false;
+  // Get DOM elements
+  const loginForm = document.getElementById('login-form');
+  const adminPanel = document.getElementById('admin-panel');
+  const passwordInput = document.getElementById('password-input');
+  const passwordError = document.getElementById('password-error');
+  const linksTab = document.getElementById('links-tab');
+  const suggestionsTab = document.getElementById('suggestions-tab');
+  const linksContent = document.getElementById('links-content');
+  const suggestionsContent = document.getElementById('suggestions-content');
+  const logoutButton = document.getElementById('logout-button');
+  
+  // Admin password (in a real app, this would be handled server-side)
+  const adminPassword = 'admin123';
   
   // Check if admin is already logged in
-  checkAdminStatus();
+  const isLoggedIn = localStorage.getItem('adminLoggedIn') === 'true';
   
-  // Handle login form submission
-  loginForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const password = document.getElementById('password').value.trim();
-    
-    if (!password) {
-      showLoginError('Please enter a password');
-      return;
-    }
-    
-    try {
-      // Get the admin document from Firestore
-      const adminDoc = await db.collection('admin').doc('credentials').get();
-      
-      if (!adminDoc.exists) {
-        showLoginError('Admin credentials not set up');
-        return;
-      }
-      
-      const adminData = adminDoc.data();
-      
-      // Compare the password (in a real app, you'd use proper authentication)
-      if (password === adminData.password) {
-        // Login successful
-        localStorage.setItem('isAdmin', 'true');
-        showAdminDashboard();
-        loadLinks();
-        loadSuggestions();
-      } else {
-        showLoginError('Incorrect password');
-      }
-    } catch (error) {
-      console.error("Login error:", error);
-      showLoginError('Error logging in. Please try again.');
-    }
-  });
-  
-  // Handle logout
-  logoutButton.addEventListener('click', () => {
-    localStorage.removeItem('isAdmin');
+  if (isLoggedIn) {
+    showAdminPanel();
+  } else {
     showLoginForm();
-  });
-  
-  // Handle tab switching
-  tabButtons.forEach(button => {
-    button.addEventListener('click', () => {
-      const tabName = button.getAttribute('data-tab');
-      
-      // Update active tab button
-      tabButtons.forEach(btn => btn.classList.remove('active'));
-      button.classList.add('active');
-      
-      // Show selected tab content
-      tabContents.forEach(content => {
-        content.classList.add('hidden');
-      });
-      document.getElementById(`${tabName}-tab`).classList.remove('hidden');
-    });
-  });
-  
-  // Handle adding a new link
-  addLinkForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    if (!isAdmin) {
-      alert('You must be logged in as admin to add links');
-      return;
-    }
-    
-    const name = document.getElementById('link-name').value.trim();
-    const url = document.getElementById('link-url').value.trim();
-    const password = document.getElementById('link-password').value.trim();
-    const visible = document.getElementById('link-visible').checked;
-    
-    try {
-      // Add link to Firestore
-      await db.collection('links').add({
-        name,
-        url,
-        password: password || null,
-        visible,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      
-      // Reset form and reload links
-      addLinkForm.reset();
-      loadLinks();
-      
-      alert('Link added successfully');
-    } catch (error) {
-      console.error("Error adding link:", error);
-      alert('Error adding link. Please try again.');
-    }
-  });
-  
-  // Function to check admin status
-  function checkAdminStatus() {
-    const adminStatus = localStorage.getItem('isAdmin');
-    
-    if (adminStatus === 'true') {
-      isAdmin = true;
-      showAdminDashboard();
-      loadLinks();
-      loadSuggestions();
-    } else {
-      isAdmin = false;
-      showLoginForm();
-    }
   }
   
-  // Function to show login error
-  function showLoginError(message) {
-    loginError.textContent = message;
-    loginError.style.display = 'block';
+  // Handle login form submission
+  if (loginForm) {
+    loginForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      
+      const password = passwordInput.value.trim();
+      
+      if (password === adminPassword) {
+        // Store login state in localStorage
+        localStorage.setItem('adminLoggedIn', 'true');
+        
+        // Show admin panel
+        showAdminPanel();
+      } else {
+        // Show error message
+        passwordError.classList.remove('hidden');
+      }
+    });
+  }
+  
+  // Handle logout
+  if (logoutButton) {
+    logoutButton.addEventListener('click', () => {
+      // Clear login state
+      localStorage.removeItem('adminLoggedIn');
+      
+      // Show login form
+      showLoginForm();
+    });
+  }
+  
+  // Handle tab switching
+  if (linksTab && suggestionsTab) {
+    linksTab.addEventListener('click', () => {
+      linksTab.classList.add('active');
+      suggestionsTab.classList.remove('active');
+      linksContent.classList.remove('hidden');
+      suggestionsContent.classList.add('hidden');
+    });
+    
+    suggestionsTab.addEventListener('click', () => {
+      suggestionsTab.classList.add('active');
+      linksTab.classList.remove('active');
+      suggestionsContent.classList.remove('hidden');
+      linksContent.classList.add('hidden');
+    });
   }
   
   // Function to show login form
   function showLoginForm() {
-    loginSection.classList.remove('hidden');
-    adminDashboard.classList.add('hidden');
-    isAdmin = false;
-  }
-  
-  // Function to show admin dashboard
-  function showAdminDashboard() {
-    loginSection.classList.add('hidden');
-    adminDashboard.classList.remove('hidden');
-    isAdmin = true;
-  }
-  
-  // Function to load links for admin
-  async function loadLinks() {
-    if (!isAdmin) return;
-    
-    try {
-      const snapshot = await db.collection('links')
-        .orderBy('createdAt', 'desc')
-        .get();
+    if (loginForm && adminPanel) {
+      loginForm.classList.remove('hidden');
+      adminPanel.classList.add('hidden');
       
-      if (snapshot.empty) {
-        linksList.innerHTML = '<p>No links available.</p>';
-        return;
+      // Clear password input and error message
+      if (passwordInput) {
+        passwordInput.value = '';
       }
-      
-      linksList.innerHTML = '';
-      
-      snapshot.forEach(doc => {
-        const link = doc.data();
-        const linkId = doc.id;
-        
-        const linkElement = document.createElement('div');
-        linkElement.className = 'admin-list-item';
-        linkElement.innerHTML = `
-          <h4>
-            ${link.name}
-            <span class="status-badge">${link.visible ? 'Visible' : 'Hidden'}</span>
-          </h4>
-          <p>URL: <a href="${link.url}" target="_blank">${link.url}</a></p>
-          <p>Password: ${link.password ? link.password : 'None'}</p>
-          
-          <div class="admin-actions">
-            <button class="edit-button" onclick="editLink('${linkId}')">Edit</button>
-            <button class="delete-button" onclick="deleteLink('${linkId}')">Delete</button>
-          </div>
-        `;
-        
-        linksList.appendChild(linkElement);
-      });
-    } catch (error) {
-      console.error("Error loading links:", error);
-      linksList.innerHTML = '<p class="error-message">Error loading links. Please try again.</p>';
-    }
-  }
-  
-  // Function to load suggestions
-  async function loadSuggestions() {
-    if (!isAdmin) return;
-    
-    try {
-      const snapshot = await db.collection('suggestions')
-        .orderBy('createdAt', 'desc')
-        .get();
-      
-      if (snapshot.empty) {
-        suggestionsList.innerHTML = '<p>No suggestions available.</p>';
-        return;
+      if (passwordError) {
+        passwordError.classList.add('hidden');
       }
-      
-      suggestionsList.innerHTML = '';
-      
-      snapshot.forEach(doc => {
-        const suggestion = doc.data();
-        const suggestionId = doc.id;
-        
-        const suggestionElement = document.createElement('div');
-        suggestionElement.className = 'admin-list-item';
-        suggestionElement.innerHTML = `
-          <h4>${suggestion.name}</h4>
-          <p>URL: <a href="${suggestion.url}" target="_blank">${suggestion.url}</a></p>
-          ${suggestion.description ? `<p>Description: ${suggestion.description}</p>` : ''}
-          ${suggestion.imageUrl ? `<p>Image URL: <a href="${suggestion.imageUrl}" target="_blank">View Image</a></p>` : ''}
-          
-          <div class="admin-actions">
-            <button class="approve-button" onclick="approveSuggestion('${suggestionId}')">Approve</button>
-            <button class="delete-button" onclick="deleteSuggestion('${suggestionId}')">Delete</button>
-          </div>
-        `;
-        
-        suggestionsList.appendChild(suggestionElement);
-      });
-    } catch (error) {
-      console.error("Error loading suggestions:", error);
-      suggestionsList.innerHTML = '<p class="error-message">Error loading suggestions. Please try again.</p>';
     }
   }
   
-  // Function to edit a link
-  window.editLink = function(linkId) {
-    if (!isAdmin) return;
-    
-    const listItem = document.querySelector(`.admin-list-item:has(button[onclick="editLink('${linkId}')"])`);
-    
-    if (!listItem) return;
-    
-    db.collection('links').doc(linkId).get()
-      .then(doc => {
-        if (!doc.exists) {
-          alert('Link not found');
-          return;
-        }
-        
-        const link = doc.data();
-        
-        // Create edit form
-        const editForm = document.createElement('div');
-        editForm.className = 'edit-form';
-        editForm.innerHTML = `
-          <div class="form-group">
-            <label for="edit-name-${linkId}">Name:</label>
-            <input type="text" id="edit-name-${linkId}" value="${link.name}" required>
-          </div>
-          <div class="form-group">
-            <label for="edit-url-${linkId}">URL:</label>
-            <input type="url" id="edit-url-${linkId}" value="${link.url}" required>
-          </div>
-          <div class="form-group">
-            <label for="edit-password-${linkId}">Password:</label>
-            <input type="text" id="edit-password-${linkId}" value="${link.password || ''}">
-          </div>
-          <div class="form-group checkbox">
-            <input type="checkbox" id="edit-visible-${linkId}" ${link.visible ? 'checked' : ''}>
-            <label for="edit-visible-${linkId}">Visible</label>
-          </div>
-          <button type="button" onclick="saveLink('${linkId}')">Save</button>
-          <button type="button" onclick="cancelEdit('${linkId}')">Cancel</button>
-        `;
-        
-        // Add edit form to list item
-        listItem.appendChild(editForm);
-        
-        // Hide the action buttons
-        const actionButtons = listItem.querySelector('.admin-actions');
-        if (actionButtons) {
-          actionButtons.style.display = 'none';
-        }
-      })
-      .catch(error => {
-        console.error("Error getting link:", error);
-        alert('Error getting link details. Please try again.');
-      });
-  };
- // Function to save edited link
-  window.saveLink = function(linkId) {
-    if (!isAdmin) return;
-    
-    const name = document.getElementById(`edit-name-${linkId}`).value.trim();
-    const url = document.getElementById(`edit-url-${linkId}`).value.trim();
-    const password = document.getElementById(`edit-password-${linkId}`).value.trim();
-    const visible = document.getElementById(`edit-visible-${linkId}`).checked;
-    
-    if (!name || !url) {
-      alert('Name and URL are required');
-      return;
-    }
-    
-    db.collection('links').doc(linkId).update({
-      name,
-      url,
-      password: password || null,
-      visible,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    })
-    .then(() => {
+  // Function to show admin panel
+  function showAdminPanel() {
+    if (loginForm && adminPanel) {
+      loginForm.classList.add('hidden');
+      adminPanel.classList.remove('hidden');
+      
+      // Load links and suggestions
       loadLinks();
-    })
-    .catch(error => {
-      console.error("Error updating link:", error);
-      alert('Error updating link. Please try again.');
-    });
-  };
-  
-  // Function to cancel edit
-  window.cancelEdit = function(linkId) {
-    const listItem = document.querySelector(`.admin-list-item:has(button[onclick="saveLink('${linkId}')"])`);
-    
-    if (!listItem) return;
-    
-    // Remove edit form
-    const editForm = listItem.querySelector('.edit-form');
-    if (editForm) {
-      editForm.remove();
+      loadSuggestions();
     }
-    
-    // Show action buttons
-    const actionButtons = listItem.querySelector('.admin-actions');
-    if (actionButtons) {
-      actionButtons.style.display = 'flex';
-    }
-  };
+  }
   
-  // Function to delete a link
-  window.deleteLink = function(linkId) {
-    if (!isAdmin) return;
+  // Function to load links
+  function loadLinks() {
+    const linksContainer = document.getElementById('links-list');
     
-    if (!confirm('Are you sure you want to delete this link?')) {
-      return;
-    }
+    if (!linksContainer) return;
     
-    db.collection('links').doc(linkId).delete()
-      .then(() => {
-        loadLinks();
-      })
-      .catch(error => {
-        console.error("Error deleting link:", error);
-        alert('Error deleting link. Please try again.');
-      });
-  };
-  
-  // Function to approve a suggestion
-  window.approveSuggestion = function(suggestionId) {
-    if (!isAdmin) return;
+    // Clear links container
+    linksContainer.innerHTML = '<p class="loading-message">Loading links...</p>';
     
-    db.collection('suggestions').doc(suggestionId).get()
-      .then(doc => {
-        if (!doc.exists) {
-          alert('Suggestion not found');
+    // Get links from Firestore
+    db.collection('links')
+      .get()
+      .then(snapshot => {
+        // Clear loading message
+        linksContainer.innerHTML = '';
+        
+        if (snapshot.empty) {
+          linksContainer.innerHTML = '<p class="empty-message">No links found.</p>';
           return;
         }
         
-        const suggestion = doc.data();
-        
-        // Add to links collection
-        return db.collection('links').add({
-          name: suggestion.name,
-          url: suggestion.url,
-          password: null,
-          visible: true,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        })
-        .then(() => {
-          // Delete the suggestion
-          return db.collection('suggestions').doc(suggestionId).delete();
-        })
-        .then(() => {
-          loadLinks();
-          loadSuggestions();
-          alert('Suggestion approved and added to links');
+        // Process links
+        snapshot.forEach(doc => {
+          const link = doc.data();
+          link.id = doc.id;
+          
+          const linkElement = createLinkElement(link);
+          linksContainer.appendChild(linkElement);
         });
       })
       .catch(error => {
-        console.error("Error approving suggestion:", error);
-        alert('Error approving suggestion. Please try again.');
+        console.error('Error loading links:', error);
+        linksContainer.innerHTML = '<p class="error-message">Error loading links. Please try again later.</p>';
       });
-  };
+  }
   
-  // Function to delete a suggestion
-  window.deleteSuggestion = function(suggestionId) {
-    if (!isAdmin) return;
+  // Function to load suggestions
+  function loadSuggestions() {
+    const suggestionsContainer = document.getElementById('suggestions-list');
     
-    if (!confirm('Are you sure you want to delete this suggestion?')) {
-      return;
-    }
+    if (!suggestionsContainer) return;
     
-    db.collection('suggestions').doc(suggestionId).delete()
-      .then(() => {
-        loadSuggestions();
+    // Clear suggestions container
+    suggestionsContainer.innerHTML = '<p class="loading-message">Loading suggestions...</p>';
+    
+    // Get suggestions from Firestore
+    db.collection('suggestions')
+      .orderBy('createdAt', 'desc')
+      .get()
+      .then(snapshot => {
+        // Clear loading message
+        suggestionsContainer.innerHTML = '';
+        
+        if (snapshot.empty) {
+          suggestionsContainer.innerHTML = '<p class="empty-message">No suggestions found.</p>';
+          return;
+        }
+        
+        // Process suggestions
+        snapshot.forEach(doc => {
+          const suggestion = doc.data();
+          suggestion.id = doc.id;
+          
+          const suggestionElement = createSuggestionElement(suggestion);
+          suggestionsContainer.appendChild(suggestionElement);
+        });
       })
       .catch(error => {
-        console.error("Error deleting suggestion:", error);
-        alert('Error deleting suggestion. Please try again.');
+        console.error('Error loading suggestions:', error);
+        suggestionsContainer.innerHTML = '<p class="error-message">Error loading suggestions. Please try again later.</p>';
       });
-  };
+  }
+  
+  // Function to create a link element
+  function createLinkElement(link) {
+    const linkElement = document.createElement('div');
+    linkElement.className = 'admin-list-item';
+    
+    // Create link content
+    linkElement.innerHTML = `
+      <h4>${link.name}</h4>
+      <p><strong>URL:</strong> <a href="${link.url}" target="_blank">${link.url}</a></p>
+      <p><strong>Folder:</strong> ${link.folder || 'None'}</p>
+      <p><strong>Subfolder:</strong> ${link.subfolder || 'None'}</p>
+      <p><strong>Visible:</strong> ${link.visible ? 'Yes' : 'No'}</p>
+      <div class="admin-actions">
+        <button class="edit-button" data-id="${link.id}">Edit</button>
+        <button class="delete-button" data-id="${link.id}">Delete</button>
+      </div>
+    `;
+    
+    // Add event listeners
+    const editButton = linkElement.querySelector('.edit-button');
+    const deleteButton = linkElement.querySelector('.delete-button');
+    
+    editButton.addEventListener('click', () => {
+      // Create edit form
+      const editForm = document.createElement('div');
+      editForm.className = 'edit-form';
+      editForm.innerHTML = `
+        <div class="form-group">
+          <label for="edit-name-${link.id}">Name</label>
+          <input type="text" id="edit-name-${link.id}" value="${link.name}" required>
+        </div>
+        <div class="form-group">
+          <label for="edit-url-${link.id}">URL</label>
+          <input type="url" id="edit-url-${link.id}" value="${link.url}" required>
+        </div>
+        <div class="form-group">
+          <label for="edit-folder-${link.id}">Folder</label>
+          <input type="text" id="edit-folder-${link.id}" value="${link.folder || ''}">
+        </div>
+        <div class="form-group">
+          <label for="edit-subfolder-${link.id}">Subfolder</label>
+          <input type="text" id="edit-subfolder-${link.id}" value="${link.subfolder || ''}">
+        </div>
+        <div class="form-group">
+          <label for="edit-password-${link.id}">Password (for folder)</label>
+          <input type="text" id="edit-password-${link.id}" value="${link.password || ''}">
+        </div>
+        <div class="form-group checkbox">
+          <input type="checkbox" id="edit-visible-${link.id}" ${link.visible ? 'checked' : ''}>
+          <label for="edit-visible-${link.id}">Visible</label>
+        </div>
+        <div class="admin-actions">
+          <button class="save-button" data-id="${link.id}">Save</button>
+          <button class="cancel-button">Cancel</button>
+        </div>
+      `;
+      
+      // Add event listeners to edit form buttons
+      const saveButton = editForm.querySelector('.save-button');
+      const cancelButton = editForm.querySelector('.cancel-button');
+      
+      saveButton.addEventListener('click', () => {
+        // Get updated values
+        const updatedLink = {
+          name: document.getElementById(`edit-name-${link.id}`).value.trim(),
+          url: document.getElementById(`edit-url-${link.id}`).value.trim(),
+          folder: document.getElementById(`edit-folder-${link.id}`).value.trim() || null,
+          subfolder: document.getElementById(`edit-subfolder-${link.id}`).value.trim() || null,
+          password: document.getElementById(`edit-password-${link.id}`).value.trim() || null,
+          visible: document.getElementById(`edit-visible-${link.id}`).checked
+        };
+        
+        // Update link in Firestore
+        db.collection('links').doc(link.id).update(updatedLink)
+          .then(() => {
+            // Remove edit form
+            editForm.remove();
+            
+            // Reload links
+            loadLinks();
+          })
+          .catch(error => {
+            console.error('Error updating link:', error);
+            alert('Error updating link. Please try again later.');
+          });
+      });
+      
+      cancelButton.addEventListener('click', () => {
+        // Remove edit form
+        editForm.remove();
+      });
+      
+      // Add edit form after link element
+      linkElement.after(editForm);
+    });
+    
+    deleteButton.addEventListener('click', () => {
+      // Confirm deletion
+      if (confirm('Are you sure you want to delete this link?')) {
+        // Delete link from Firestore
+        db.collection('links').doc(link.id).delete()
+          .then(() => {
+            // Remove link element
+            linkElement.remove();
+          })
+          .catch(error => {
+            console.error('Error deleting link:', error);
+            alert('Error deleting link. Please try again later.');
+          });
+      }
+    });
+    
+    return linkElement;
+  }
+  
+  // Function to create a suggestion element
+  function createSuggestionElement(suggestion) {
+    const suggestionElement = document.createElement('div');
+    suggestionElement.className = 'admin-list-item';
+    
+    // Create suggestion content
+    suggestionElement.innerHTML = `
+      <h4>${suggestion.name}</h4>
+      <p><strong>URL:</strong> <a href="${suggestion.url}" target="_blank">${suggestion.url}</a></p>
+      ${suggestion.description ? `<p><strong>Description:</strong> ${suggestion.description}</p>` : ''}
+      ${suggestion.imageUrl ? `<p><strong>Image URL:</strong> <a href="${suggestion.imageUrl}" target="_blank">${suggestion.imageUrl}</a></p>` : ''}
+      <p><strong>Submitted:</strong> ${suggestion.createdAt ? new Date(suggestion.createdAt.toDate()).toLocaleString() : 'Unknown'}</p>
+      <div class="admin-actions">
+        <button class="approve-button" data-id="${suggestion.id}">Approve</button>
+        <button class="delete-button" data-id="${suggestion.id}">Delete</button>
+      </div>
+    `;
+    
+    // Add event listeners
+    const approveButton = suggestionElement.querySelector('.approve-button');
+    const deleteButton = suggestionElement.querySelector('.delete-button');
+    
+    approveButton.addEventListener('click', () => {
+      // Create link from suggestion
+      const newLink = {
+        name: suggestion.name,
+        url: suggestion.url,
+        description: suggestion.description || null,
+        imageUrl: suggestion.imageUrl || null,
+        folder: null,
+        subfolder: null,
+        visible: true,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      
+      // Add link to Firestore
+      db.collection('links').add(newLink)
+        .then(() => {
+          // Delete suggestion
+          return db.collection('suggestions').doc(suggestion.id).delete();
+        })
+        .then(() => {
+          // Remove suggestion element
+          suggestionElement.remove();
+          
+          // Reload links
+          loadLinks();
+        })
+        .catch(error => {
+          console.error('Error approving suggestion:', error);
+          alert('Error approving suggestion. Please try again later.');
+        });
+    });
+    
+    deleteButton.addEventListener('click', () => {
+      // Confirm deletion
+      if (confirm('Are you sure you want to delete this suggestion?')) {
+        // Delete suggestion from Firestore
+        db.collection('suggestions').doc(suggestion.id).delete()
+          .then(() => {
+            // Remove suggestion element
+            suggestionElement.remove();
+          })
+          .catch(error => {
+            console.error('Error deleting suggestion:', error);
+            alert('Error deleting suggestion. Please try again later.');
+          });
+      }
+    });
+    
+    return suggestionElement;
+  }
+  
+  // Add new link form
+  const addLinkForm = document.getElementById('add-link-form');
+  
+  if (addLinkForm) {
+    addLinkForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      
+      // Get form values
+      const name = document.getElementById('add-name').value.trim();
+      const url = document.getElementById('add-url').value.trim();
+      const folder = document.getElementById('add-folder').value.trim();
+      const subfolder = document.getElementById('add-subfolder').value.trim();
+      const password = document.getElementById('add-password').value.trim();
+      const visible = document.getElementById('add-visible').checked;
+      
+      // Create new link
+      const newLink = {
+        name,
+        url,
+        folder: folder || null,
+        subfolder: subfolder || null,
+        password: password || null,
+        visible,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      
+      // Add link to Firestore
+      db.collection('links').add(newLink)
+        .then(() => {
+          // Reset form
+          addLinkForm.reset();
+          
+          // Reload links
+          loadLinks();
+        })
+        .catch(error => {
+          console.error('Error adding link:', error);
+          alert('Error adding link. Please try again later.');
+        });
+    });
+  }
 });
