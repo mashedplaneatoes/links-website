@@ -35,11 +35,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 name: link.folder,
                 subfolders: {},
                 links: [],
-                hasPassword: !!link.password,
-                password: link.password || null
+                hasPassword: false,
+                password: null
               };
-            } else if (link.password && !folders[link.folder].hasPassword) {
-              // If this link has a password and the folder doesn't have one yet, set it
+            }
+            
+            // Check if this link has a password
+            if (link.password) {
               folders[link.folder].hasPassword = true;
               folders[link.folder].password = link.password;
             }
@@ -299,7 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const visibleLinks = Array.from(folderContent.querySelectorAll('.link-item')).filter(link => link.style.display !== 'none');
           const visibleSubfolders = Array.from(folderContent.querySelectorAll('.subfolder')).filter(subfolder => subfolder.style.display !== 'none');
           
-          if (visibleLinks.length === 0 && visibleSubfolders.length === 0) {
+                    if (visibleLinks.length === 0 && visibleSubfolders.length === 0) {
             folder.style.display = 'none';
           }
         });
@@ -352,3 +354,4 @@ document.addEventListener('DOMContentLoaded', () => {
   // Load links when page loads
   loadLinks();
 });
+
