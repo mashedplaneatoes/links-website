@@ -133,7 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       
       if (!isAdmin) {
-        alert('You must be logged in as admin to add links');
+        
         return;
       }
       
@@ -160,7 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
         addLinkForm.reset();
         loadLinks();
         
-        alert('Link added successfully');
+      
       } catch (error) {
         console.error("Error adding link:", error);
         alert('Error adding link. Please try again.');
