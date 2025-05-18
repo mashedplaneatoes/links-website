@@ -614,7 +614,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function applyBackgroundImage() {
   // Set your fixed background image URL here
-  const fixedBackgroundUrl = 'https://example.com/your-background-image.jpg';
+  const fixedBackgroundUrl = 'https://claude.ai/api/810b0d1f-3c93-4233-a3ba-9244180633db/files/e6bf8dd0-3d54-4ef5-bad0-ca02b28cb85e/preview';
   
   // Apply the fixed background image
   document.body.style.backgroundImage = `url(${fixedBackgroundUrl})`;
