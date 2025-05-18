@@ -307,5 +307,47 @@ button:hover {
         border-radius: 5px;
     }
 }
+/* Add these styles to your existing CSS file */
+
+.link-url-container {
+  display: flex;
+  align-items: center;
+  margin: 8px 0;
+  font-size: 0.9em;
+  color: #666;
+}
+
+.link-url {
+  margin-right: 8px;
+  word-break: break-all;
+  max-width: calc(100% - 30px);
+}
+
+.copy-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 3px;
+  color: #3498db;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  transition: background-color 0.2s;
+}
+
+.copy-button:hover {
+  background-color: #f0f0f0;
+}
+
+.copy-button.copied {
+  color: #2ecc71;
+}
+
+.copy-button svg {
+  width: 16px;
+  height: 16px;
+}
+
 
     
