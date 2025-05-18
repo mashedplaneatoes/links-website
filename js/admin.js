@@ -372,7 +372,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Function to apply fixed background image
   function applyBackgroundImage() {
     // Set your fixed background image URL here
-    const fixedBackgroundUrl = 'https://your-background-image-url.jpg';
+    const fixedBackgroundUrl = 'https://www.shutterstock.com/image-vector/pixel-art-game-level-background-600nw-2553891639.jpg';
     
     document.body.style.backgroundImage = `url(${fixedBackgroundUrl})`;
     document.body.classList.add('with-bg-image');
