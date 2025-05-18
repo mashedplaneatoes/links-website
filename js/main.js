@@ -513,105 +513,133 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   
-  // Function to show background image controls for admin
-  function showBackgroundImageControls() {
-    if (!isAdmin) return;
-    
-    // Check if controls already exist
-    if (document.querySelector('.bg-image-controls')) return;
-    
-    // Create controls
-    const controls = document.createElement('div');
-    controls.className = 'bg-image-controls';
-    controls.innerHTML = `
+ // Function to show background image controls for admin
+function showBackgroundImageControls() {
+  if (!isAdmin) return;
+  
+  // Check if controls already exist
+  if (document.querySelector('.bg-image-controls')) return;
+  
+  // Create controls
+  const controls = document.createElement('div');
+  controls.className = 'bg-image-controls';
+  controls.innerHTML = `
+    <div class="bg-controls-header">
       <h4>Background Image</h4>
+      <button id="minimize-bg-controls" class="minimize-button">×</button>
+    </div>
+    <div class="bg-controls-content">
       <input type="text" id="bg-image-url" placeholder="Enter image URL">
       <button id="apply-bg">Apply Background</button>
       <button id="remove-bg" class="remove-bg">Remove Background</button>
-    `;
-    
-    document.body.appendChild(controls);
-    
-    // Load current background image URL if exists
-    db.collection('settings').doc('appearance').get()
-      .then(doc => {
-        if (doc.exists && doc.data().backgroundImage) {
-          document.getElementById('bg-image-url').value = doc.data().backgroundImage;
-        }
-      })
-      .catch(error => {
-        console.error("Error getting background settings:", error);
-      });
-    
-    // Apply background image
-    document.getElementById('apply-bg').addEventListener('click', () => {
-      const imageUrl = document.getElementById('bg-image-url').value.trim();
-      if (imageUrl) {
-        // Save to Firestore
-        db.collection('settings').doc('appearance').set({
-          backgroundImage: imageUrl
-        }, { merge: true })
-        .then(() => {
-          applyBackgroundImage(imageUrl);
-          alert('Background image updated successfully');
-        })
-        .catch(error => {
-          console.error("Error saving background image:", error);
-          alert('Error saving background image');
-        });
-      }
-    });
-    
-    // Remove background image
-    document.getElementById('remove-bg').addEventListener('click', () => {
-      // Remove from Firestore
-      db.collection('settings').doc('appearance').update({
-        backgroundImage: firebase.firestore.FieldValue.delete()
-      })
-      .then(() => {
-        document.body.style.backgroundImage = '';
-        document.body.classList.remove('with-bg-image');
-        document.getElementById('bg-image-url').value = '';
-        alert('Background image removed');
-      })
-      .catch(error => {
-        console.error("Error removing background image:", error);
-        alert('Error removing background image');
-      });
-    });
-    
-    // Allow pressing Enter to apply background
-    document.getElementById('bg-image-url').addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        document.getElementById('apply-bg').click();
-      }
-    });
-  }
+    </div>
+  `;
   
-  // Function to apply background image
-  function applyBackgroundImage(customUrl = null) {
-    // If a custom URL is provided, use it directly
-    if (customUrl) {
-      document.body.style.backgroundImage = `url(${customUrl})`;
-      document.body.classList.add('with-bg-image');
-      return;
+  document.body.appendChild(controls);
+  
+  // Add CSS for minimized state
+  const style = document.createElement('style');
+  style.textContent = `
+    .bg-image-controls.minimized .bg-controls-content {
+      display: none;
     }
-    
-    // Otherwise fetch from Firestore
-    db.collection('settings').doc('appearance').get()
-      .then(doc => {
-        if (doc.exists && doc.data().backgroundImage) {
-          document.body.style.backgroundImage = `url(${doc.data().backgroundImage})`;
-          document.body.classList.add('with-bg-image');
-        } else {
-          document.body.style.backgroundImage = '';
-          document.body.classList.remove('with-bg-image');
-        }
+    .bg-controls-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .minimize-button {
+      background: none;
+      border: none;
+      color: var(--text-color);
+      font-size: 20px;
+      cursor: pointer;
+      padding: 0 5px;
+      transform: none;
+    }
+    .minimize-button:hover {
+      color: var(--secondary-color);
+      background-color: transparent;
+    }
+  `;
+  document.head.appendChild(style);
+  
+  // Add minimize functionality
+  document.getElementById('minimize-bg-controls').addEventListener('click', () => {
+    controls.classList.toggle('minimized');
+    const button = document.getElementById('minimize-bg-controls');
+    button.textContent = controls.classList.contains('minimized') ? '□' : '×';
+  });
+  
+  // Load current background image URL if exists
+  db.collection('settings').doc('appearance').get()
+    .then(doc => {
+      if (doc.exists && doc.data().backgroundImage) {
+        document.getElementById('bg-image-url').value = doc.data().backgroundImage;
+      }
+    })
+    .catch(error => {
+      console.error("Error getting background settings:", error);
+    });
+  
+  // Apply background image
+  document.getElementById('apply-bg').addEventListener('click', () => {
+    const imageUrl = document.getElementById('bg-image-url').value.trim();
+    if (imageUrl) {
+      // Save to Firestore
+      db.collection('settings').doc('appearance').set({
+        backgroundImage: imageUrl
+      }, { merge: true })
+      .then(() => {
+        applyBackgroundImage(imageUrl);
+        alert('Background image updated successfully');
       })
       .catch(error => {
-        console.error("Error getting background image:", error);
+        console.error("Error saving background image:", error);
+        alert('Error saving background image');
       });
+    }
+  });
+  
+  // Remove background image
+  document.getElementById('remove-bg').addEventListener('click', () => {
+    // Remove from Firestore
+    db.collection('settings').doc('appearance').update({
+      backgroundImage: firebase.firestore.FieldValue.delete()
+    })
+    .then(() => {
+      document.body.style.backgroundImage = '';
+      document.body.classList.remove('with-bg-image');
+      document.getElementById('bg-image-url').value = '';
+      alert('Background image removed');
+    })
+    .catch(error => {
+      console.error("Error removing background image:", error);
+      alert('Error removing background image');
+    });
+  });
+  
+  // Allow pressing Enter to apply background
+  document.getElementById('bg-image-url').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      document.getElementById('apply-bg').click();
+    }
+  });
+  
+  // Save minimized state in localStorage
+  controls.addEventListener('transitionend', () => {
+    localStorage.setItem('bgControlsMinimized', controls.classList.contains('minimized'));
+  });
+  
+  // Check if it was previously minimized
+  const wasMinimized = localStorage.getItem('bgControlsMinimized') === 'true';
+  if (wasMinimized) {
+    controls.classList.add('minimized');
+    document.getElementById('minimize-bg-controls').textContent = '□';
   }
+}
+
   
   // Handle suggestion form submission
   if (suggestionForm) {
