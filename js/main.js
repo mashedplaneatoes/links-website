@@ -619,6 +619,39 @@ document.addEventListener('DOMContentLoaded', () => {
       suggestionsList.innerHTML = '<p class="error-message">Error loading suggestions. Please try again.</p>';
     }
   }
+  // Function to apply background image
+function applyBackgroundImage(customUrl = null) {
+  console.log("Applying background image:", customUrl);
+  
+  // If a custom URL is provided, use it directly
+  if (customUrl) {
+    document.body.style.backgroundImage = `url(${customUrl})`;
+    document.body.classList.add('with-bg-image');
+    return;
+  }
+  
+  // Otherwise fetch from Firestore
+  try {
+    db.collection('settings').doc('appearance').get()
+      .then(doc => {
+        if (doc.exists && doc.data().backgroundImage) {
+          document.body.style.backgroundImage = `url(${doc.data().backgroundImage})`;
+          document.body.classList.add('with-bg-image');
+          console.log("Applied background from Firestore:", doc.data().backgroundImage);
+        } else {
+          document.body.style.backgroundImage = '';
+          document.body.classList.remove('with-bg-image');
+          console.log("No background image found in Firestore");
+        }
+      })
+      .catch(error => {
+        console.error("Error getting background image:", error);
+      });
+  } catch (error) {
+    console.error("Error accessing Firestore for background:", error);
+  }
+}
+
   // Function to show background image controls for admin
 function showBackgroundImageControls() {
   console.log("showBackgroundImageControls called");
