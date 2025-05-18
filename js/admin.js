@@ -1,120 +1,136 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const loginSection = document.getElementById('login-section');
-  const adminDashboard = document.getElementById('admin-dashboard');
+  // Get DOM elements
   const loginForm = document.getElementById('login-form');
   const loginError = document.getElementById('login-error');
-  const logoutButton = document.getElementById('logout-button');
+  const adminLogin = document.getElementById('admin-login');
+  const adminPanel = document.getElementById('admin-panel');
   const addLinkForm = document.getElementById('add-link-form');
   const linksList = document.getElementById('links-list');
   const suggestionsList = document.getElementById('suggestions-list');
   const tabButtons = document.querySelectorAll('.tab-button');
   const tabContents = document.querySelectorAll('.tab-content');
   
-  // Admin authentication state
+  // Hide error message initially
+  if (loginError) {
+    loginError.style.display = 'none';
+  }
+  
+  // Track admin status
   let isAdmin = false;
   
-  // Check if admin is already logged in
-  checkAdminStatus();
+  // Check if already logged in
+  const adminPassword = localStorage.getItem('adminPassword');
+  if (adminPassword) {
+    verifyAdminPassword(adminPassword);
+  }
   
   // Handle login form submission
-  loginForm.addEventListener('submit', async (e) => {
+  loginForm.addEventListener('submit', (e) => {
     e.preventDefault();
     
-    const password = document.getElementById('password').value.trim();
+    const password = document.getElementById('admin-password').value.trim();
     
     if (!password) {
       showLoginError('Please enter a password');
       return;
     }
     
-    try {
-      // Get the admin document from Firestore
-      const adminDoc = await db.collection('admin').doc('credentials').get();
-      
-      if (!adminDoc.exists) {
-        showLoginError('Admin credentials not set up');
-        return;
-      }
-      
-      const adminData = adminDoc.data();
-      
-      // Compare the password (in a real app, you'd use proper authentication)
-      if (password === adminData.password) {
-        // Login successful
-        localStorage.setItem('isAdmin', 'true');
-        showAdminDashboard();
-        loadLinks();
-        loadSuggestions();
-      } else {
-        showLoginError('Incorrect password');
-      }
-    } catch (error) {
-      console.error("Login error:", error);
-      showLoginError('Error logging in. Please try again.');
-    }
+    verifyAdminPassword(password);
   });
   
-  // Handle logout
-  logoutButton.addEventListener('click', () => {
-    localStorage.removeItem('isAdmin');
-    showLoginForm();
-  });
+  // Function to verify admin password
+  function verifyAdminPassword(password) {
+    db.collection('admin').doc('credentials').get()
+      .then(doc => {
+        if (!doc.exists) {
+          showLoginError('Admin credentials not found');
+          return;
+        }
+        
+        const credentials = doc.data();
+        
+        if (password === credentials.password) {
+          // Password is correct, show admin panel
+          isAdmin = true;
+          localStorage.setItem('adminPassword', password);
+          showAdminPanel();
+          loadLinks();
+          loadSuggestions();
+        } else {
+          showLoginError('Incorrect password');
+          localStorage.removeItem('adminPassword');
+        }
+      })
+      .catch(error => {
+        console.error("Error verifying admin password:", error);
+        showLoginError('Error verifying password. Please try again.');
+      });
+  }
+  
+  // Function to show login error
+  function showLoginError(message) {
+    loginError.textContent = message;
+    loginError.style.display = 'block';
+  }
+  
+  // Function to show admin panel
+  function showAdminPanel() {
+    adminLogin.classList.add('hidden');
+    adminPanel.classList.remove('hidden');
+  }
   
   // Handle tab switching
   tabButtons.forEach(button => {
     button.addEventListener('click', () => {
-      const tabName = button.getAttribute('data-tab');
-      
-      // Update active tab button
+      // Remove active class from all buttons
       tabButtons.forEach(btn => btn.classList.remove('active'));
+      
+      // Add active class to clicked button
       button.classList.add('active');
       
+      // Hide all tab contents
+      tabContents.forEach(content => content.classList.add('hidden'));
+      
       // Show selected tab content
-      tabContents.forEach(content => {
-        content.classList.add('hidden');
-      });
-      document.getElementById(`${tabName}-tab`).classList.remove('hidden');
+      const tabId = button.getAttribute('data-tab');
+      document.getElementById(tabId).classList.remove('hidden');
+      
+      // Load data for the tab if needed
+      if (tabId === 'manage-links') {
+        loadLinks();
+      } else if (tabId === 'review-suggestions') {
+        loadSuggestions();
+      }
     });
   });
   
   // Handle adding a new link
-addLinkForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  
-  if (!isAdmin) {
-    alert('You must be logged in as admin to add links');
-    return;
-  }
-  
-  const name = document.getElementById('link-name').value.trim();
-  const url = document.getElementById('link-url').value.trim();
-  const password = document.getElementById('link-password').value.trim();
-  const visible = document.getElementById('link-visible').checked;
-  const folder = document.getElementById('link-folder').value.trim();
-  const subfolder = document.getElementById('link-subfolder').value.trim();
-  
-  try {
-    // Add link to Firestore
-    await db.collection('links').add({
-      name,
-      url,
-      password: password || null,
-      visible,
-      folder: folder || null,
-      subfolder: subfolder || null,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+  addLinkForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
     
-    // Reset form and reload links
-    addLinkForm.reset();
-    loadLinks();
+    if (!isAdmin) {
+      alert('You must be logged in as admin to add links');
+      return;
+    }
     
-    alert('Link added successfully');
-  } catch (error) {
-    console.error("Error adding link:", error);
-    alert('Error adding link. Please try again.');
-  }
-});
+    const name = document.getElementById('link-name').value.trim();
+    const url = document.getElementById('link-url').value.trim();
+    const password = document.getElementById('link-password').value.trim();
+    const visible = document.getElementById('link-visible').checked;
+    const folder = document.getElementById('link-folder').value.trim();
+    const subfolder = document.getElementById('link-subfolder').value.trim();
+    
+    try {
+      // Add link to Firestore
+      await db.collection('links').add({
+        name,
+        url,
+        password: password || null,
+        visible,
+        folder: folder || null,
+        subfolder: subfolder || null,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
       
       // Reset form and reload links
       addLinkForm.reset();
@@ -127,52 +143,11 @@ addLinkForm.addEventListener('submit', async (e) => {
     }
   });
   
-  // Function to check admin status
-  function checkAdminStatus() {
-    const adminStatus = localStorage.getItem('isAdmin');
-    
-    if (adminStatus === 'true') {
-      isAdmin = true;
-      showAdminDashboard();
-      loadLinks();
-      loadSuggestions();
-    } else {
-      isAdmin = false;
-      showLoginForm();
-    }
-  }
-  
- // Function to show login error
-function showLoginError(message) {
-  loginError.textContent = message;
-  loginError.style.display = 'block';
-}
-
-// Hide error message initially
-document.addEventListener('DOMContentLoaded', () => {
-  const loginError = document.getElementById('login-error');
-  if (loginError) {
-    loginError.style.display = 'none';
-  }
-});
-
-  // Function to show login form
-  function showLoginForm() {
-    loginSection.classList.remove('hidden');
-    adminDashboard.classList.add('hidden');
-    isAdmin = false;
-  }
-  
-  // Function to show admin dashboard
-  function showAdminDashboard() {
-    loginSection.classList.add('hidden');
-    adminDashboard.classList.remove('hidden');
-    isAdmin = true;
-  }
-  
-  // Function to load links for admin
+  // Function to load links
   async function loadLinks() {
     if (!isAdmin) return;
+    
+    linksList.innerHTML = '<p class="loading-message">Loading links...</p>';
     
     try {
       const snapshot = await db.collection('links')
@@ -180,7 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
         .get();
       
       if (snapshot.empty) {
-        linksList.innerHTML = '<p>No links available.</p>';
+        linksList.innerHTML = '<p>No links found.</p>';
         return;
       }
       
@@ -199,6 +174,8 @@ document.addEventListener('DOMContentLoaded', () => {
           </h4>
           <p>URL: <a href="${link.url}" target="_blank">${link.url}</a></p>
           <p>Password: ${link.password ? link.password : 'None'}</p>
+          <p>Folder: ${link.folder ? link.folder : 'None'}</p>
+          <p>Subfolder: ${link.subfolder ? link.subfolder : 'None'}</p>
           
           <div class="admin-actions">
             <button class="edit-button" onclick="editLink('${linkId}')">Edit</button>
@@ -218,13 +195,15 @@ document.addEventListener('DOMContentLoaded', () => {
   async function loadSuggestions() {
     if (!isAdmin) return;
     
+    suggestionsList.innerHTML = '<p class="loading-message">Loading suggestions...</p>';
+    
     try {
       const snapshot = await db.collection('suggestions')
         .orderBy('createdAt', 'desc')
         .get();
       
       if (snapshot.empty) {
-        suggestionsList.innerHTML = '<p>No suggestions available.</p>';
+        suggestionsList.innerHTML = '<p>No suggestions found.</p>';
         return;
       }
       
@@ -240,7 +219,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <h4>${suggestion.name}</h4>
           <p>URL: <a href="${suggestion.url}" target="_blank">${suggestion.url}</a></p>
           ${suggestion.description ? `<p>Description: ${suggestion.description}</p>` : ''}
-          ${suggestion.imageUrl ? `<p>Image URL: <a href="${suggestion.imageUrl}" target="_blank">View Image</a></p>` : ''}
+          ${suggestion.imageUrl ? `<p>Image URL: <a href="${suggestion.imageUrl}" target="_blank">${suggestion.imageUrl}</a></p>` : ''}
           
           <div class="admin-actions">
             <button class="approve-button" onclick="approveSuggestion('${suggestionId}')">Approve</button>
@@ -289,6 +268,14 @@ document.addEventListener('DOMContentLoaded', () => {
             <label for="edit-password-${linkId}">Password:</label>
             <input type="text" id="edit-password-${linkId}" value="${link.password || ''}">
           </div>
+          <div class="form-group">
+            <label for="edit-folder-${linkId}">Folder:</label>
+            <input type="text" id="edit-folder-${linkId}" value="${link.folder || ''}">
+          </div>
+          <div class="form-group">
+            <label for="edit-subfolder-${linkId}">Subfolder:</label>
+            <input type="text" id="edit-subfolder-${linkId}" value="${link.subfolder || ''}">
+          </div>
           <div class="form-group checkbox">
             <input type="checkbox" id="edit-visible-${linkId}" ${link.visible ? 'checked' : ''}>
             <label for="edit-visible-${linkId}">Visible</label>
@@ -311,7 +298,8 @@ document.addEventListener('DOMContentLoaded', () => {
         alert('Error getting link details. Please try again.');
       });
   };
- // Function to save edited link
+  
+  // Function to save edited link
   window.saveLink = function(linkId) {
     if (!isAdmin) return;
     
@@ -319,6 +307,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const url = document.getElementById(`edit-url-${linkId}`).value.trim();
     const password = document.getElementById(`edit-password-${linkId}`).value.trim();
     const visible = document.getElementById(`edit-visible-${linkId}`).checked;
+    const folder = document.getElementById(`edit-folder-${linkId}`).value.trim();
+    const subfolder = document.getElementById(`edit-subfolder-${linkId}`).value.trim();
     
     if (!name || !url) {
       alert('Name and URL are required');
@@ -330,6 +320,8 @@ document.addEventListener('DOMContentLoaded', () => {
       url,
       password: password || null,
       visible,
+      folder: folder || null,
+      subfolder: subfolder || null,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     })
     .then(() => {
@@ -397,6 +389,8 @@ document.addEventListener('DOMContentLoaded', () => {
           url: suggestion.url,
           password: null,
           visible: true,
+          folder: null,
+          subfolder: null,
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         })
         .then(() => {
