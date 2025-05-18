@@ -350,22 +350,27 @@ button:active {
   color: white;
 }
 
+/* Update the admin tab content to have scrollbars */
 .tab-content {
   flex: 1;
   overflow-y: auto;
   padding-right: 10px;
+  max-height: 70vh; /* Set a max height for admin panels */
 }
+
+
 
 .admin-list {
   margin-top: 20px;
 }
 
-/* For the admin links list */
+/* Remove the individual scrollbars for lists */
 #links-list, #suggestions-list {
-  max-height: 60vh;
-  overflow-y: auto;
-  padding-right: 10px;
+  max-height: none; /* Remove the fixed height */
+  overflow-y: visible; /* Remove the scrollbar */
+  padding-right: 0;
 }
+
 
 /* Same for admin lists */
 #links-list::-webkit-scrollbar,
