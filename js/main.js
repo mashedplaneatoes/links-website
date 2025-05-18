@@ -24,6 +24,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // Admin authentication state
   let isAdmin = false;
   
+  // Function to generate a secure random token
+  function generateSecureToken() {
+    const array = new Uint8Array(16);
+    window.crypto.getRandomValues(array);
+    return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+  }
+  
   // Check if admin is already logged in
   checkAdminStatus();
   
@@ -52,8 +59,19 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Compare the password (in a real app, you'd use proper authentication)
         if (password === adminData.password) {
-          // Login successful
-          localStorage.setItem('isAdmin', 'true');
+          // Login successful - create secure session
+          const sessionToken = generateSecureToken();
+          
+          // Set secure cookie
+          document.cookie = `adminSession=${sessionToken}; path=/; max-age=3600; SameSite=Strict${location.protocol === 'https:' ? '; Secure' : ''}`;
+          
+          // Store token in Firestore with expiration
+          await db.collection('adminSessions').add({
+            token: sessionToken,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            expiresAt: new Date(Date.now() + 3600000) // 1 hour from now
+          });
+          
           showAdminDashboard();
           loadLinks();
           loadSuggestions();
@@ -72,8 +90,25 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Handle logout
   if (logoutButton) {
-    logoutButton.addEventListener('click', () => {
-      localStorage.removeItem('isAdmin');
+    logoutButton.addEventListener('click', async () => {
+      // Clear the session cookie
+      document.cookie = 'adminSession=; path=/; max-age=0; SameSite=Strict';
+      
+      // Delete the session from Firestore
+      try {
+        const token = getSessionToken();
+        if (token) {
+          const sessionsRef = db.collection('adminSessions');
+          const snapshot = await sessionsRef.where('token', '==', token).get();
+          
+          snapshot.forEach(doc => {
+            doc.ref.delete();
+          });
+        }
+      } catch (error) {
+        console.error("Error removing session:", error);
+      }
+      
       showLoginForm();
       
       // Hide background image controls when logging out
@@ -142,19 +177,67 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   
-  // Function to check admin status
-  function checkAdminStatus() {
-    const adminStatus = localStorage.getItem('isAdmin');
+  // Function to get session token from cookies
+  function getSessionToken() {
+    const cookies = document.cookie.split(';').map(c => c.trim());
+    const sessionCookie = cookies.find(c => c.startsWith('adminSession='));
     
-    if (adminStatus === 'true') {
-      isAdmin = true;
-      showAdminDashboard();
-      loadLinks();
-      loadSuggestions();
+    if (!sessionCookie) return null;
+    
+    return sessionCookie.split('=')[1];
+  }
+  
+  // Function to check admin status
+  async function checkAdminStatus() {
+    const token = getSessionToken();
+    
+    if (!token) {
+      isAdmin = false;
+      if (loginSection) {
+        showLoginForm();
+      }
       
-      // Show background image controls for admin
-      showBackgroundImageControls();
-    } else {
+      // Load links for public view
+      if (linksContainer) {
+        loadPublicLinks();
+      }
+      
+      // Apply background image if set
+      applyBackgroundImage();
+      return;
+    }
+    
+    try {
+      // Verify token exists in Firestore and is not expired
+      const snapshot = await db.collection('adminSessions')
+        .where('token', '==', token)
+        .where('expiresAt', '>', new Date())
+        .get();
+      
+      if (snapshot.empty) {
+        isAdmin = false;
+        if (loginSection) {
+          showLoginForm();
+        }
+      } else {
+        isAdmin = true;
+        if (loginSection && adminDashboard) {
+          showAdminDashboard();
+          loadLinks();
+          loadSuggestions();
+          
+          // Show background image controls for admin
+          showBackgroundImageControls();
+        }
+        
+        // Extend session
+        const sessionDoc = snapshot.docs[0];
+        sessionDoc.ref.update({
+          expiresAt: new Date(Date.now() + 3600000) // extend by 1 hour
+        });
+      }
+    } catch (error) {
+      console.error("Error checking admin status:", error);
       isAdmin = false;
       if (loginSection) {
         showLoginForm();
@@ -225,19 +308,31 @@ document.addEventListener('DOMContentLoaded', () => {
         linkElement.className = 'admin-list-item';
         linkElement.innerHTML = `
           <h4>
-            ${link.name}
+            ${escapeHtml(link.name)}
             <span class="status-badge ${link.visible ? 'visible' : 'hidden'}">${link.visible ? 'Visible' : 'Hidden'}</span>
           </h4>
-          <p>URL: <a href="${link.url}" target="_blank">${link.url}</a></p>
-          ${link.folder ? `<p>Folder: ${link.folder}</p>` : ''}
-          ${link.subfolder ? `<p>Subfolder: ${link.subfolder}</p>` : ''}
-          <p>Password: ${link.password ? link.password : 'None'}</p>
+          <p>URL: <a href="${escapeHtml(link.url)}" target="_blank">${escapeHtml(link.url)}</a></p>
+          ${link.folder ? `<p>Folder: ${escapeHtml(link.folder)}</p>` : ''}
+          ${link.subfolder ? `<p>Subfolder: ${escapeHtml(link.subfolder)}</p>` : ''}
+          <p>Password: ${link.password ? escapeHtml(link.password) : 'None'}</p>
           
           <div class="admin-actions">
-            <button class="edit-button" onclick="editLink('${linkId}')">Edit</button>
-            <button class="delete-button" onclick="deleteLink('${linkId}')">Delete</button>
+            <button class="edit-button" data-id="${linkId}">Edit</button>
+            <button class="delete-button" data-id="${linkId}">Delete</button>
           </div>
         `;
+        
+        // Add event listeners for edit and delete
+        const editButton = linkElement.querySelector('.edit-button');
+        const deleteButton = linkElement.querySelector('.delete-button');
+        
+        editButton.addEventListener('click', () => {
+          editLink(linkId);
+        });
+        
+        deleteButton.addEventListener('click', () => {
+          deleteLink(linkId);
+        });
         
         linksList.appendChild(linkElement);
       });
@@ -278,7 +373,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (link.password) {
             // For password protected links, don't show the URL at all
             cardContent = `
-              <h3>${link.name}</h3>
+              <h3>${escapeHtml(link.name)}</h3>
               <div class="password-protected">
                 <p>This link is password protected</p>
               </div>
@@ -289,17 +384,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const displayUrl = urlObj.hostname + (urlObj.pathname !== '/' ? urlObj.pathname : '');
             
             cardContent = `
-              <h3>${link.name}</h3>
+              <h3>${escapeHtml(link.name)}</h3>
               <div class="link-url-container">
-                <span class="link-url">${displayUrl}</span>
-                <button class="copy-button" title="Copy URL to clipboard" data-url="${link.url}">
+                <span class="link-url">${escapeHtml(displayUrl)}</span>
+                <button class="copy-button" title="Copy URL to clipboard" data-url="${escapeHtml(link.url)}">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                   </svg>
                 </button>
               </div>
-              <a href="${link.url}" target="_blank" rel="noopener noreferrer">View Link</a>
+              <a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">View Link</a>
             `;
           }
           
@@ -339,13 +434,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Create URL display and copy button
                 const urlObj = new URL(link.url);
-                const displayUrl = urlObj.hostname + (urlObj.pathname !== '/' ? urlObj.pathname : '');
+                                const displayUrl = urlObj.hostname + (urlObj.pathname !== '/' ? urlObj.pathname : '');
                 
                 const urlContainer = document.createElement('div');
                 urlContainer.className = 'link-url-container';
                 urlContainer.innerHTML = `
-                  <span class="link-url">${displayUrl}</span>
-                  <button class="copy-button" title="Copy URL to clipboard" data-url="${link.url}">
+                  <span class="link-url">${escapeHtml(displayUrl)}</span>
+                  <button class="copy-button" title="Copy URL to clipboard" data-url="${escapeHtml(link.url)}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -421,7 +516,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
           }
           
-                    linksContainer.appendChild(linkCard);
+          linksContainer.appendChild(linkCard);
         });
         
         // Add search functionality
@@ -460,7 +555,7 @@ document.addEventListener('DOMContentLoaded', () => {
         linksContainer.appendChild(noResultsElement);
       }
       
-      noResultsElement.textContent = `No links found matching "${searchTerm}"`;
+      noResultsElement.textContent = `No links found matching "${escapeHtml(searchTerm)}"`;
       noResultsElement.style.display = 'block';
     } else {
       const noResultsElement = linksContainer.querySelector('.no-results');
@@ -493,17 +588,29 @@ document.addEventListener('DOMContentLoaded', () => {
         const suggestionElement = document.createElement('div');
         suggestionElement.className = 'admin-list-item';
         suggestionElement.innerHTML = `
-          <h4>${suggestion.name}</h4>
-          <p>URL: <a href="${suggestion.url}" target="_blank">${suggestion.url}</a></p>
-          ${suggestion.description ? `<p>Description: ${suggestion.description}</p>` : ''}
-          ${suggestion.imageUrl ? `<p>Image URL: <a href="${suggestion.imageUrl}" target="_blank">${suggestion.imageUrl}</a></p>` : ''}
+          <h4>${escapeHtml(suggestion.name)}</h4>
+          <p>URL: <a href="${escapeHtml(suggestion.url)}" target="_blank">${escapeHtml(suggestion.url)}</a></p>
+          ${suggestion.description ? `<p>Description: ${escapeHtml(suggestion.description)}</p>` : ''}
+          ${suggestion.imageUrl ? `<p>Image URL: <a href="${escapeHtml(suggestion.imageUrl)}" target="_blank">${escapeHtml(suggestion.imageUrl)}</a></p>` : ''}
           <p>Submitted: ${suggestion.createdAt ? new Date(suggestion.createdAt.toDate()).toLocaleString() : 'Unknown'}</p>
           
           <div class="admin-actions">
-            <button class="approve-button" onclick="approveSuggestion('${suggestionId}')">Approve</button>
-            <button class="delete-button" onclick="deleteSuggestion('${suggestionId}')">Delete</button>
+            <button class="approve-button" data-id="${suggestionId}">Approve</button>
+            <button class="delete-button" data-id="${suggestionId}">Delete</button>
           </div>
         `;
+        
+        // Add event listeners for approve and delete
+        const approveButton = suggestionElement.querySelector('.approve-button');
+        const deleteButton = suggestionElement.querySelector('.delete-button');
+        
+        approveButton.addEventListener('click', () => {
+          approveSuggestion(suggestionId);
+        });
+        
+        deleteButton.addEventListener('click', () => {
+          deleteSuggestion(suggestionId);
+        });
         
         suggestionsList.appendChild(suggestionElement);
       });
@@ -513,140 +620,162 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   
- // Function to show background image controls for admin
-function showBackgroundImageControls() {
-  if (!isAdmin) return;
-  
-  // Check if controls already exist
-  if (document.querySelector('.bg-image-controls')) return;
-  
-  // Create controls
-  const controls = document.createElement('div');
-  controls.className = 'bg-image-controls';
-  controls.innerHTML = `
-    <div class="bg-controls-header">
-      <h4>Background Image</h4>
-      <button id="minimize-bg-controls" class="minimize-button">×</button>
-    </div>
-    <div class="bg-controls-content">
-      <input type="text" id="bg-image-url" placeholder="Enter image URL">
-      <button id="apply-bg">Apply Background</button>
-      <button id="remove-bg" class="remove-bg">Remove Background</button>
-    </div>
-  `;
-  
-  document.body.appendChild(controls);
-  
-  // Add CSS for minimized state
-  const style = document.createElement('style');
-  style.textContent = `
-    .bg-image-controls.minimized .bg-controls-content {
-      display: none;
-    }
-    .bg-controls-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-  position: relative;
-  padding-right: 5px;
-}
-
-.minimize-button {
-  position: absolute;
-  right: 0;
-  top: 0;
-  background: none;
-  border: none;
-  color: var(--text-color);
-  font-size: 20px;
-  cursor: pointer;
-  padding: 0 5px;
-  transform: none;
-}
-
-    .minimize-button:hover {
-      color: var(--secondary-color);
-      background-color: transparent;
-    }
-  `;
-  document.head.appendChild(style);
-  
-  // Add minimize functionality
-  document.getElementById('minimize-bg-controls').addEventListener('click', () => {
-    controls.classList.toggle('minimized');
-    const button = document.getElementById('minimize-bg-controls');
-    button.textContent = controls.classList.contains('minimized') ? '□' : '×';
-  });
-  
-  // Load current background image URL if exists
-  db.collection('settings').doc('appearance').get()
-    .then(doc => {
-      if (doc.exists && doc.data().backgroundImage) {
-        document.getElementById('bg-image-url').value = doc.data().backgroundImage;
+  // Function to show background image controls for admin
+  function showBackgroundImageControls() {
+    if (!isAdmin) return;
+    
+    // Check if controls already exist
+    if (document.querySelector('.bg-image-controls')) return;
+    
+    // Create controls
+    const controls = document.createElement('div');
+    controls.className = 'bg-image-controls';
+    controls.innerHTML = `
+      <div class="bg-controls-header">
+        <h4>Background Image</h4>
+        <button id="minimize-bg-controls" class="minimize-button">×</button>
+      </div>
+      <div class="bg-controls-content">
+        <input type="text" id="bg-image-url" placeholder="Enter image URL">
+        <button id="apply-bg">Apply Background</button>
+        <button id="remove-bg" class="remove-bg">Remove Background</button>
+      </div>
+    `;
+    
+    document.body.appendChild(controls);
+    
+    // Add CSS for minimized state
+    const style = document.createElement('style');
+    style.textContent = `
+      .bg-image-controls.minimized .bg-controls-content {
+        display: none;
       }
-    })
-    .catch(error => {
-      console.error("Error getting background settings:", error);
+      .bg-controls-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        position: relative;
+        padding-right: 5px;
+      }
+      .minimize-button {
+        position: absolute;
+        right: 0;
+        top: 0;
+        background: none;
+        border: none;
+        color: var(--text-color);
+        font-size: 20px;
+        cursor: pointer;
+        padding: 0 5px;
+        transform: none;
+      }
+      .minimize-button:hover {
+        color: var(--secondary-color);
+        background-color: transparent;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // Add minimize functionality
+    document.getElementById('minimize-bg-controls').addEventListener('click', () => {
+      controls.classList.toggle('minimized');
+      const button = document.getElementById('minimize-bg-controls');
+      button.textContent = controls.classList.contains('minimized') ? '□' : '×';
     });
-  
-  // Apply background image
-  document.getElementById('apply-bg').addEventListener('click', () => {
-    const imageUrl = document.getElementById('bg-image-url').value.trim();
-    if (imageUrl) {
-      // Save to Firestore
-      db.collection('settings').doc('appearance').set({
-        backgroundImage: imageUrl
-      }, { merge: true })
-      .then(() => {
-        applyBackgroundImage(imageUrl);
-        alert('Background image updated successfully');
+    
+    // Load current background image URL if exists
+    db.collection('settings').doc('appearance').get()
+      .then(doc => {
+        if (doc.exists && doc.data().backgroundImage) {
+          document.getElementById('bg-image-url').value = doc.data().backgroundImage;
+        }
       })
       .catch(error => {
-        console.error("Error saving background image:", error);
-        alert('Error saving background image');
+        console.error("Error getting background settings:", error);
       });
-    }
-  });
-  
-  // Remove background image
-  document.getElementById('remove-bg').addEventListener('click', () => {
-    // Remove from Firestore
-    db.collection('settings').doc('appearance').update({
-      backgroundImage: firebase.firestore.FieldValue.delete()
-    })
-    .then(() => {
-      document.body.style.backgroundImage = '';
-      document.body.classList.remove('with-bg-image');
-      document.getElementById('bg-image-url').value = '';
-      alert('Background image removed');
-    })
-    .catch(error => {
-      console.error("Error removing background image:", error);
-      alert('Error removing background image');
+    
+    // Apply background image
+    document.getElementById('apply-bg').addEventListener('click', () => {
+      const imageUrl = document.getElementById('bg-image-url').value.trim();
+      if (imageUrl) {
+        // Save to Firestore
+        db.collection('settings').doc('appearance').set({
+          backgroundImage: imageUrl
+        }, { merge: true })
+        .then(() => {
+          applyBackgroundImage(imageUrl);
+          alert('Background image updated successfully');
+        })
+        .catch(error => {
+          console.error("Error saving background image:", error);
+          alert('Error saving background image');
+        });
+      }
     });
-  });
-  
-  // Allow pressing Enter to apply background
-  document.getElementById('bg-image-url').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-      document.getElementById('apply-bg').click();
+    
+    // Remove background image
+    document.getElementById('remove-bg').addEventListener('click', () => {
+      // Remove from Firestore
+      db.collection('settings').doc('appearance').update({
+        backgroundImage: firebase.firestore.FieldValue.delete()
+      })
+      .then(() => {
+        document.body.style.backgroundImage = '';
+        document.body.classList.remove('with-bg-image');
+        document.getElementById('bg-image-url').value = '';
+        alert('Background image removed');
+      })
+      .catch(error => {
+        console.error("Error removing background image:", error);
+        alert('Error removing background image');
+      });
+    });
+    
+    // Allow pressing Enter to apply background
+    document.getElementById('bg-image-url').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        document.getElementById('apply-bg').click();
+      }
+    });
+    
+    // Save minimized state in localStorage
+    controls.addEventListener('transitionend', () => {
+      localStorage.setItem('bgControlsMinimized', controls.classList.contains('minimized'));
+    });
+    
+    // Check if it was previously minimized
+    const wasMinimized = localStorage.getItem('bgControlsMinimized') === 'true';
+    if (wasMinimized) {
+      controls.classList.add('minimized');
+      document.getElementById('minimize-bg-controls').textContent = '□';
     }
-  });
-  
-  // Save minimized state in localStorage
-  controls.addEventListener('transitionend', () => {
-    localStorage.setItem('bgControlsMinimized', controls.classList.contains('minimized'));
-  });
-  
-  // Check if it was previously minimized
-  const wasMinimized = localStorage.getItem('bgControlsMinimized') === 'true';
-  if (wasMinimized) {
-    controls.classList.add('minimized');
-    document.getElementById('minimize-bg-controls').textContent = '□';
   }
-}
-
+  
+  // Function to apply background image
+  function applyBackgroundImage(customUrl = null) {
+    // If a custom URL is provided, use it directly
+    if (customUrl) {
+      document.body.style.backgroundImage = `url(${customUrl})`;
+      document.body.classList.add('with-bg-image');
+      return;
+    }
+    
+    // Otherwise fetch from Firestore
+    db.collection('settings').doc('appearance').get()
+      .then(doc => {
+        if (doc.exists && doc.data().backgroundImage) {
+          document.body.style.backgroundImage = `url(${doc.data().backgroundImage})`;
+          document.body.classList.add('with-bg-image');
+        } else {
+          document.body.style.backgroundImage = '';
+          document.body.classList.remove('with-bg-image');
+        }
+      })
+      .catch(error => {
+        console.error("Error getting background image:", error);
+      });
+  }
   
   // Handle suggestion form submission
   if (suggestionForm) {
@@ -691,10 +820,10 @@ function showBackgroundImageControls() {
   }
   
   // Function to edit a link
-  window.editLink = function(linkId) {
+  function editLink(linkId) {
     if (!isAdmin) return;
     
-    const listItem = document.querySelector(`.admin-list-item:has(button[onclick="editLink('${linkId}')"])`);
+    const listItem = document.querySelector(`.admin-list-item:has(button[data-id="${linkId}"])`);
     
     if (!listItem) return;
     
@@ -713,30 +842,30 @@ function showBackgroundImageControls() {
         editForm.innerHTML = `
           <div class="form-group">
             <label for="edit-name-${linkId}">Name:</label>
-            <input type="text" id="edit-name-${linkId}" value="${link.name}" required>
+                        <input type="text" id="edit-name-${linkId}" value="${escapeHtml(link.name)}" required>
           </div>
           <div class="form-group">
             <label for="edit-url-${linkId}">URL:</label>
-            <input type="url" id="edit-url-${linkId}" value="${link.url}" required>
+            <input type="url" id="edit-url-${linkId}" value="${escapeHtml(link.url)}" required>
           </div>
           <div class="form-group">
             <label for="edit-folder-${linkId}">Folder:</label>
-            <input type="text" id="edit-folder-${linkId}" value="${link.folder || ''}">
+            <input type="text" id="edit-folder-${linkId}" value="${link.folder ? escapeHtml(link.folder) : ''}">
           </div>
           <div class="form-group">
             <label for="edit-subfolder-${linkId}">Subfolder:</label>
-            <input type="text" id="edit-subfolder-${linkId}" value="${link.subfolder || ''}">
+            <input type="text" id="edit-subfolder-${linkId}" value="${link.subfolder ? escapeHtml(link.subfolder) : ''}">
           </div>
           <div class="form-group">
             <label for="edit-password-${linkId}">Password:</label>
-            <input type="text" id="edit-password-${linkId}" value="${link.password || ''}">
+            <input type="text" id="edit-password-${linkId}" value="${link.password ? escapeHtml(link.password) : ''}">
           </div>
           <div class="form-group checkbox">
             <input type="checkbox" id="edit-visible-${linkId}" ${link.visible ? 'checked' : ''}>
             <label for="edit-visible-${linkId}">Visible</label>
           </div>
-          <button type="button" onclick="saveLink('${linkId}')">Save</button>
-          <button type="button" onclick="cancelEdit('${linkId}')">Cancel</button>
+          <button type="button" class="save-button" data-id="${linkId}">Save</button>
+          <button type="button" class="cancel-button" data-id="${linkId}">Cancel</button>
         `;
         
         // Add edit form to list item
@@ -747,15 +876,27 @@ function showBackgroundImageControls() {
         if (actionButtons) {
           actionButtons.style.display = 'none';
         }
+        
+        // Add event listeners for save and cancel
+        const saveButton = editForm.querySelector('.save-button');
+        const cancelButton = editForm.querySelector('.cancel-button');
+        
+        saveButton.addEventListener('click', () => {
+          saveLink(linkId);
+        });
+        
+        cancelButton.addEventListener('click', () => {
+          cancelEdit(linkId);
+        });
       })
       .catch(error => {
         console.error("Error getting link:", error);
         alert('Error getting link details. Please try again.');
       });
-  };
+  }
   
   // Function to save edited link
-  window.saveLink = function(linkId) {
+  function saveLink(linkId) {
     if (!isAdmin) return;
     
     const name = document.getElementById(`edit-name-${linkId}`).value.trim();
@@ -786,11 +927,11 @@ function showBackgroundImageControls() {
       console.error("Error updating link:", error);
       alert('Error updating link. Please try again.');
     });
-  };
+  }
   
   // Function to cancel edit
-  window.cancelEdit = function(linkId) {
-    const listItem = document.querySelector(`.admin-list-item:has(button[onclick="saveLink('${linkId}')"])`);
+  function cancelEdit(linkId) {
+    const listItem = document.querySelector(`.admin-list-item:has(.save-button[data-id="${linkId}"])`);
     
     if (!listItem) return;
     
@@ -805,10 +946,10 @@ function showBackgroundImageControls() {
     if (actionButtons) {
       actionButtons.style.display = 'flex';
     }
-  };
+  }
   
   // Function to delete a link
-  window.deleteLink = function(linkId) {
+  function deleteLink(linkId) {
     if (!isAdmin) return;
     
     if (!confirm('Are you sure you want to delete this link?')) {
@@ -823,10 +964,10 @@ function showBackgroundImageControls() {
         console.error("Error deleting link:", error);
         alert('Error deleting link. Please try again.');
       });
-  };
+  }
   
   // Function to approve a suggestion
-  window.approveSuggestion = function(suggestionId) {
+  function approveSuggestion(suggestionId) {
     if (!isAdmin) return;
     
     db.collection('suggestions').doc(suggestionId).get()
@@ -860,10 +1001,10 @@ function showBackgroundImageControls() {
         console.error("Error approving suggestion:", error);
         alert('Error approving suggestion. Please try again.');
       });
-  };
+  }
   
   // Function to delete a suggestion
-  window.deleteSuggestion = function(suggestionId) {
+  function deleteSuggestion(suggestionId) {
     if (!isAdmin) return;
     
     if (!confirm('Are you sure you want to delete this suggestion?')) {
@@ -878,8 +1019,7 @@ function showBackgroundImageControls() {
         console.error("Error deleting suggestion:", error);
         alert('Error deleting suggestion. Please try again.');
       });
-  };
-  
+  }
   
   // Load public links if on the main page
   if (linksContainer) {
@@ -910,6 +1050,8 @@ function isValidUrl(url) {
 
 // Helper function to escape HTML
 function escapeHtml(unsafe) {
+  if (typeof unsafe !== 'string') return '';
+  
   return unsafe
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -974,4 +1116,4 @@ function checkDarkModePreference() {
 // Call dark mode check on page load
 checkDarkModePreference();
 
-            
+
