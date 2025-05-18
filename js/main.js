@@ -544,20 +544,27 @@ function showBackgroundImageControls() {
       display: none;
     }
     .bg-controls-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 10px;
-    }
-    .minimize-button {
-      background: none;
-      border: none;
-      color: var(--text-color);
-      font-size: 20px;
-      cursor: pointer;
-      padding: 0 5px;
-      transform: none;
-    }
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  position: relative;
+  padding-right: 5px;
+}
+
+.minimize-button {
+  position: absolute;
+  right: 0;
+  top: 0;
+  background: none;
+  border: none;
+  color: var(--text-color);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 5px;
+  transform: none;
+}
+
     .minimize-button:hover {
       color: var(--secondary-color);
       background-color: transparent;
