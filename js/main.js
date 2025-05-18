@@ -226,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
         linkElement.innerHTML = `
           <h4>
             ${link.name}
-            <span class="status-badge">${link.visible ? 'Visible' : 'Hidden'}</span>
+            <span class="status-badge ${link.visible ? 'visible' : 'hidden'}">${link.visible ? 'Visible' : 'Hidden'}</span>
           </h4>
           <p>URL: <a href="${link.url}" target="_blank">${link.url}</a></p>
           ${link.folder ? `<p>Folder: ${link.folder}</p>` : ''}
@@ -272,31 +272,41 @@ document.addEventListener('DOMContentLoaded', () => {
           const linkCard = document.createElement('div');
           linkCard.className = 'link-card';
           
-          // Create a shortened URL for display
-          const urlObj = new URL(link.url);
-          const displayUrl = urlObj.hostname + (urlObj.pathname !== '/' ? urlObj.pathname : '');
+          // Create content based on whether the link is password protected
+          let cardContent = '';
           
-          linkCard.innerHTML = `
-            <h3>${link.name}</h3>
-            <div class="link-url-container">
-              <span class="link-url">${displayUrl}</span>
-              <button class="copy-button" title="Copy URL to clipboard">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                </svg>
-              </button>
-            </div>
-            <a href="${link.url}" target="_blank" rel="noopener noreferrer">View Link</a>
-          `;
+          if (link.password) {
+            // For password protected links, don't show the URL at all
+            cardContent = `
+              <h3>${link.name}</h3>
+              <div class="password-protected">
+                <p>This link is password protected</p>
+              </div>
+            `;
+          } else {
+            // For non-password protected links, show URL and copy button
+            const urlObj = new URL(link.url);
+            const displayUrl = urlObj.hostname + (urlObj.pathname !== '/' ? urlObj.pathname : '');
+            
+            cardContent = `
+              <h3>${link.name}</h3>
+              <div class="link-url-container">
+                <span class="link-url">${displayUrl}</span>
+                <button class="copy-button" title="Copy URL to clipboard" data-url="${link.url}">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                </button>
+              </div>
+              <a href="${link.url}" target="_blank" rel="noopener noreferrer">View Link</a>
+            `;
+          }
+          
+          linkCard.innerHTML = cardContent;
           
           // Add password protection if needed
           if (link.password) {
-            const viewLink = linkCard.querySelector('a');
-            const passwordProtected = document.createElement('div');
-            passwordProtected.className = 'password-protected';
-            passwordProtected.innerHTML = '<p>This link is password protected</p>';
-            
             const passwordForm = document.createElement('div');
             passwordForm.className = 'password-form hidden';
             passwordForm.innerHTML = `
@@ -305,6 +315,7 @@ document.addEventListener('DOMContentLoaded', () => {
               <p class="password-error hidden">Incorrect password</p>
             `;
             
+            const passwordProtected = linkCard.querySelector('.password-protected');
             passwordProtected.addEventListener('click', () => {
               passwordForm.classList.toggle('hidden');
             });
@@ -317,52 +328,146 @@ document.addEventListener('DOMContentLoaded', () => {
               const enteredPassword = passwordInput.value.trim();
               
               if (enteredPassword === link.password) {
-                window.open(link.url, '_blank');
+                // Password correct - now reveal the URL and copy button
                 passwordForm.classList.add('hidden');
                 passwordInput.value = '';
                 passwordError.classList.add('hidden');
+                
+                // Remove the password protected message
+                passwordProtected.remove();
+                passwordForm.remove();
+                
+                // Create URL display and copy button
+                const urlObj = new URL(link.url);
+                const displayUrl = urlObj.hostname + (urlObj.pathname !== '/' ? urlObj.pathname : '');
+                
+                const urlContainer = document.createElement('div');
+                urlContainer.className = 'link-url-container';
+                urlContainer.innerHTML = `
+                  <span class="link-url">${displayUrl}</span>
+                  <button class="copy-button" title="Copy URL to clipboard" data-url="${link.url}">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                  </button>
+                `;
+                
+                // Add view link
+                const viewLink = document.createElement('a');
+                viewLink.href = link.url;
+                viewLink.target = "_blank";
+                viewLink.rel = "noopener noreferrer";
+                viewLink.textContent = "View Link";
+                
+                // Add the elements to the card
+                linkCard.appendChild(urlContainer);
+                linkCard.appendChild(viewLink);
+                
+                // Add copy button functionality
+                const copyButton = urlContainer.querySelector('.copy-button');
+                copyButton.addEventListener('click', () => {
+                  navigator.clipboard.writeText(link.url)
+                    .then(() => {
+                      // Show temporary success message
+                      const originalTitle = copyButton.getAttribute('title');
+                      copyButton.setAttribute('title', 'Copied!');
+                      copyButton.classList.add('copied');
+                      
+                      // Reset after 2 seconds
+                      setTimeout(() => {
+                        copyButton.setAttribute('title', originalTitle);
+                        copyButton.classList.remove('copied');
+                      }, 2000);
+                    })
+                    .catch(err => {
+                      console.error('Could not copy text: ', err);
+                    });
+                });
               } else {
                 passwordError.classList.remove('hidden');
               }
             });
             
-            viewLink.addEventListener('click', (e) => {
-              e.preventDefault();
-              passwordForm.classList.remove('hidden');
+            // Allow pressing Enter to submit password
+            passwordInput.addEventListener('keypress', (e) => {
+              if (e.key === 'Enter') {
+                unlockButton.click();
+              }
             });
             
-            linkCard.appendChild(passwordProtected);
             linkCard.appendChild(passwordForm);
+          } else {
+            // Add copy button functionality for non-password protected links
+            const copyButton = linkCard.querySelector('.copy-button');
+            copyButton.addEventListener('click', () => {
+              const url = copyButton.getAttribute('data-url');
+              navigator.clipboard.writeText(url)
+                .then(() => {
+                  // Show temporary success message
+                  const originalTitle = copyButton.getAttribute('title');
+                  copyButton.setAttribute('title', 'Copied!');
+                  copyButton.classList.add('copied');
+                  
+                  // Reset after 2 seconds
+                  setTimeout(() => {
+                    copyButton.setAttribute('title', originalTitle);
+                    copyButton.classList.remove('copied');
+                  }, 2000);
+                })
+                .catch(err => {
+                  console.error('Could not copy text: ', err);
+                });
+            });
           }
           
-          // Add copy button functionality
-          const copyButton = linkCard.querySelector('.copy-button');
-          copyButton.addEventListener('click', () => {
-            navigator.clipboard.writeText(link.url)
-              .then(() => {
-                // Show temporary success message
-                const originalTitle = copyButton.getAttribute('title');
-                copyButton.setAttribute('title', 'Copied!');
-                copyButton.classList.add('copied');
-                
-                // Reset after 2 seconds
-                setTimeout(() => {
-                  copyButton.setAttribute('title', originalTitle);
-                  copyButton.classList.remove('copied');
-                }, 2000);
-              })
-              .catch(err => {
-                console.error('Could not copy text: ', err);
-              });
-          });
-          
-          linksContainer.appendChild(linkCard);
+                    linksContainer.appendChild(linkCard);
         });
+        
+        // Add search functionality
+        if (searchInput) {
+          searchInput.addEventListener('input', filterLinks);
+        }
       })
       .catch(error => {
-        console.error('Error loading links:', error);
-        linksContainer.innerHTML = '<p class="error-message">Error loading links. Please try again later.</p>';
+        console.error("Error loading public links:", error);
+        linksContainer.innerHTML = '<p class="error-message">Error loading links. Please try again.</p>';
       });
+  }
+  
+  // Function to filter links based on search input
+  function filterLinks() {
+    if (!searchInput || !linksContainer) return;
+    
+    const searchTerm = searchInput.value.toLowerCase().trim();
+    const linkCards = linksContainer.querySelectorAll('.link-card');
+    
+    linkCards.forEach(card => {
+      const linkName = card.querySelector('h3').textContent.toLowerCase();
+      const isVisible = linkName.includes(searchTerm);
+      card.style.display = isVisible ? 'block' : 'none';
+    });
+    
+    // Show message if no results
+    const visibleCards = Array.from(linkCards).filter(card => card.style.display !== 'none');
+    
+    if (visibleCards.length === 0 && searchTerm !== '') {
+      let noResultsElement = linksContainer.querySelector('.no-results');
+      
+      if (!noResultsElement) {
+        noResultsElement = document.createElement('p');
+        noResultsElement.className = 'no-results';
+        linksContainer.appendChild(noResultsElement);
+      }
+      
+      noResultsElement.textContent = `No links found matching "${searchTerm}"`;
+      noResultsElement.style.display = 'block';
+    } else {
+      const noResultsElement = linksContainer.querySelector('.no-results');
+      if (noResultsElement) {
+        noResultsElement.style.display = 'none';
+      }
+    }
   }
   
   // Function to load suggestions
@@ -391,7 +496,8 @@ document.addEventListener('DOMContentLoaded', () => {
           <h4>${suggestion.name}</h4>
           <p>URL: <a href="${suggestion.url}" target="_blank">${suggestion.url}</a></p>
           ${suggestion.description ? `<p>Description: ${suggestion.description}</p>` : ''}
-          ${suggestion.imageUrl ? `<p>Image URL: <a href="${suggestion.imageUrl}" target="_blank">View Image</a></p>` : ''}
+          ${suggestion.imageUrl ? `<p>Image URL: <a href="${suggestion.imageUrl}" target="_blank">${suggestion.imageUrl}</a></p>` : ''}
+          <p>Submitted: ${suggestion.createdAt ? new Date(suggestion.createdAt.toDate()).toLocaleString() : 'Unknown'}</p>
           
           <div class="admin-actions">
             <button class="approve-button" onclick="approveSuggestion('${suggestionId}')">Approve</button>
@@ -407,29 +513,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   
-  // Function to show background image controls (admin only)
+  // Function to show background image controls for admin
   function showBackgroundImageControls() {
-    // Remove any existing controls first
-    const existingControls = document.querySelector('.bg-image-controls');
-    if (existingControls) {
-      existingControls.remove();
-    }
+    if (!isAdmin) return;
     
-    // Create background image controls
-    const bgImageControls = document.createElement('div');
-    bgImageControls.className = 'bg-image-controls';
-    bgImageControls.innerHTML = `
+    // Check if controls already exist
+    if (document.querySelector('.bg-image-controls')) return;
+    
+    // Create controls
+    const controls = document.createElement('div');
+    controls.className = 'bg-image-controls';
+    controls.innerHTML = `
       <h4>Background Image</h4>
       <input type="text" id="bg-image-url" placeholder="Enter image URL">
       <button id="apply-bg">Apply Background</button>
       <button id="remove-bg" class="remove-bg">Remove Background</button>
     `;
-    document.body.appendChild(bgImageControls);
     
-    // Get the background image from Firestore if it exists
+    document.body.appendChild(controls);
+    
+    // Load current background image URL if exists
     db.collection('settings').doc('appearance').get()
       .then(doc => {
-                if (doc.exists && doc.data().backgroundImage) {
+        if (doc.exists && doc.data().backgroundImage) {
           document.getElementById('bg-image-url').value = doc.data().backgroundImage;
         }
       })
@@ -739,6 +845,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
   };
   
+  
   // Load public links if on the main page
   if (linksContainer) {
     loadPublicLinks();
@@ -748,4 +855,88 @@ document.addEventListener('DOMContentLoaded', () => {
   applyBackgroundImage();
 });
 
+// Helper function to format dates
+function formatDate(timestamp) {
+  if (!timestamp) return 'Unknown';
+  
+  const date = timestamp.toDate();
+  return new Date(date).toLocaleString();
+}
 
+// Helper function to validate URLs
+function isValidUrl(url) {
+  try {
+    new URL(url);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Helper function to escape HTML
+function escapeHtml(unsafe) {
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// Helper function to create folder structure
+function createFolderStructure(links) {
+  const folders = {};
+  
+  // Group links by folder and subfolder
+  links.forEach(link => {
+    const folder = link.folder || 'Uncategorized';
+    const subfolder = link.subfolder || 'General';
+    
+    if (!folders[folder]) {
+      folders[folder] = {};
+    }
+    
+    if (!folders[folder][subfolder]) {
+      folders[folder][subfolder] = [];
+    }
+    
+    folders[folder][subfolder].push(link);
+  });
+  
+  return folders;
+}
+
+// Function to toggle dark/light mode
+function toggleDarkMode() {
+  const body = document.body;
+  const isDarkMode = body.classList.contains('dark-mode');
+  
+  if (isDarkMode) {
+    body.classList.remove('dark-mode');
+    localStorage.setItem('darkMode', 'false');
+  } else {
+    body.classList.add('dark-mode');
+    localStorage.setItem('darkMode', 'true');
+  }
+}
+
+// Check for dark mode preference on page load
+function checkDarkModePreference() {
+  const darkModePreference = localStorage.getItem('darkMode');
+  
+  if (darkModePreference === 'true') {
+    document.body.classList.add('dark-mode');
+  } else if (darkModePreference === null) {
+    // Check system preference if no stored preference
+    const prefersDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (prefersDarkMode) {
+      document.body.classList.add('dark-mode');
+      localStorage.setItem('darkMode', 'true');
+    }
+  }
+}
+
+// Call dark mode check on page load
+checkDarkModePreference();
+
+            
