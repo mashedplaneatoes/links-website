@@ -78,28 +78,43 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   
   // Handle adding a new link
-  addLinkForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
+addLinkForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  if (!isAdmin) {
+    alert('You must be logged in as admin to add links');
+    return;
+  }
+  
+  const name = document.getElementById('link-name').value.trim();
+  const url = document.getElementById('link-url').value.trim();
+  const password = document.getElementById('link-password').value.trim();
+  const visible = document.getElementById('link-visible').checked;
+  const folder = document.getElementById('link-folder').value.trim();
+  const subfolder = document.getElementById('link-subfolder').value.trim();
+  
+  try {
+    // Add link to Firestore
+    await db.collection('links').add({
+      name,
+      url,
+      password: password || null,
+      visible,
+      folder: folder || null,
+      subfolder: subfolder || null,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
     
-    if (!isAdmin) {
-      alert('You must be logged in as admin to add links');
-      return;
-    }
+    // Reset form and reload links
+    addLinkForm.reset();
+    loadLinks();
     
-    const name = document.getElementById('link-name').value.trim();
-    const url = document.getElementById('link-url').value.trim();
-    const password = document.getElementById('link-password').value.trim();
-    const visible = document.getElementById('link-visible').checked;
-    
-    try {
-      // Add link to Firestore
-      await db.collection('links').add({
-        name,
-        url,
-        password: password || null,
-        visible,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
+    alert('Link added successfully');
+  } catch (error) {
+    console.error("Error adding link:", error);
+    alert('Error adding link. Please try again.');
+  }
+});
       
       // Reset form and reload links
       addLinkForm.reset();
