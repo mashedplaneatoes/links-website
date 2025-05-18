@@ -76,8 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
           loadLinks();
           loadSuggestions();
           
-          // Show background image controls for admin
-          showBackgroundImageControls();
+          
         } else {
           showLoginError('Incorrect password');
         }
@@ -111,11 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
       
       showLoginForm();
       
-      // Hide background image controls when logging out
-      const bgControls = document.querySelector('.bg-image-controls');
-      if (bgControls) {
-        bgControls.remove();
-      }
+      
     });
   }
   
@@ -226,8 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
           loadLinks();
           loadSuggestions();
           
-          // Show background image controls for admin
-          showBackgroundImageControls();
+          
         }
         
         // Extend session
@@ -619,257 +613,16 @@ document.addEventListener('DOMContentLoaded', () => {
       suggestionsList.innerHTML = '<p class="error-message">Error loading suggestions. Please try again.</p>';
     }
   }
-  // Function to apply background image
-function applyBackgroundImage(customUrl = null) {
-  console.log("Applying background image:", customUrl);
+  function applyBackgroundImage() {
+  // Set your fixed background image URL here
+  const fixedBackgroundUrl = 'https://example.com/your-background-image.jpg';
   
-  // If a custom URL is provided, use it directly
-  if (customUrl) {
-    document.body.style.backgroundImage = `url(${customUrl})`;
-    document.body.classList.add('with-bg-image');
-    return;
-  }
+  // Apply the fixed background image
+  document.body.style.backgroundImage = `url(${fixedBackgroundUrl})`;
+  document.body.classList.add('with-bg-image');
   
-  // Otherwise fetch from Firestore
-  try {
-    db.collection('settings').doc('appearance').get()
-      .then(doc => {
-        if (doc.exists && doc.data().backgroundImage) {
-          document.body.style.backgroundImage = `url(${doc.data().backgroundImage})`;
-          document.body.classList.add('with-bg-image');
-          console.log("Applied background from Firestore:", doc.data().backgroundImage);
-        } else {
-          document.body.style.backgroundImage = '';
-          document.body.classList.remove('with-bg-image');
-          console.log("No background image found in Firestore");
-        }
-      })
-      .catch(error => {
-        console.error("Error getting background image:", error);
-      });
-  } catch (error) {
-    console.error("Error accessing Firestore for background:", error);
-  }
+  console.log("Applied fixed background image");
 }
-
-  // Function to show background image controls for admin
-function showBackgroundImageControls() {
-  console.log("showBackgroundImageControls called");
-  
-  // Get admin status from localStorage (we'll fix this later)
-  const adminStatus = localStorage.getItem('isAdmin') === 'true';
-  console.log("Admin status from localStorage:", adminStatus);
-  
-  if (!adminStatus) {
-    console.log("Not admin, not showing controls");
-    return;
-  }
-  
-  // Check if controls already exist
-  if (document.querySelector('.bg-image-controls')) {
-    console.log("Controls already exist");
-    return;
-  }
-  
-  console.log("Creating background controls");
-  
-  // Create controls
-  const controls = document.createElement('div');
-  controls.className = 'bg-image-controls';
-  controls.innerHTML = `
-    <div class="bg-controls-header">
-      <h4>Background Image</h4>
-      <button id="minimize-bg-controls" class="minimize-button">×</button>
-    </div>
-    <div class="bg-controls-content">
-      <input type="text" id="bg-image-url" placeholder="Enter image URL">
-      <button id="apply-bg">Apply Background</button>
-      <button id="remove-bg" class="remove-bg">Remove Background</button>
-    </div>
-  `;
-  
-  document.body.appendChild(controls);
-  
-  // Add CSS for minimized state
-  const style = document.createElement('style');
-  style.textContent = `
-    .bg-image-controls {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      background-color: var(--bg-color);
-      border: 1px solid var(--border-color);
-      border-radius: 5px;
-      padding: 15px;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-      z-index: 1000;
-      width: 300px;
-      max-width: 90vw;
-    }
-    .bg-image-controls.minimized .bg-controls-content {
-      display: none;
-    }
-    .bg-controls-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 10px;
-      position: relative;
-    }
-    .minimize-button {
-      position: absolute;
-      right: 0;
-      top: 0;
-      background: none;
-      border: none;
-      color: var(--text-color);
-      font-size: 20px;
-      cursor: pointer;
-      padding: 0 5px;
-      transform: none;
-    }
-    .minimize-button:hover {
-      color: var(--secondary-color);
-      background-color: transparent;
-    }
-    #bg-image-url {
-      width: 100%;
-      margin-bottom: 10px;
-      padding: 8px;
-      border: 1px solid var(--border-color);
-      border-radius: 4px;
-    }
-    #apply-bg, #remove-bg {
-      padding: 8px 15px;
-      margin-right: 5px;
-      cursor: pointer;
-    }
-  `;
-  document.head.appendChild(style);
-  
-  // Add minimize functionality
-  const minimizeButton = document.getElementById('minimize-bg-controls');
-  if (minimizeButton) {
-    minimizeButton.addEventListener('click', () => {
-      controls.classList.toggle('minimized');
-      minimizeButton.textContent = controls.classList.contains('minimized') ? '□' : '×';
-    });
-  } else {
-    console.error("Minimize button not found");
-  }
-  
-  // Load current background image URL if exists
-  try {
-    db.collection('settings').doc('appearance').get()
-      .then(doc => {
-        if (doc.exists && doc.data().backgroundImage) {
-          const bgUrlInput = document.getElementById('bg-image-url');
-          if (bgUrlInput) {
-            bgUrlInput.value = doc.data().backgroundImage;
-          }
-        }
-      })
-      .catch(error => {
-        console.error("Error getting background settings:", error);
-      });
-  } catch (error) {
-    console.error("Error accessing Firestore:", error);
-  }
-  
-  // Apply background image
-  const applyButton = document.getElementById('apply-bg');
-  if (applyButton) {
-    applyButton.addEventListener('click', () => {
-      const bgUrlInput = document.getElementById('bg-image-url');
-      if (!bgUrlInput) return;
-      
-      const imageUrl = bgUrlInput.value.trim();
-      if (imageUrl) {
-        try {
-          // Save to Firestore
-          db.collection('settings').doc('appearance').set({
-            backgroundImage: imageUrl
-          }, { merge: true })
-          .then(() => {
-            applyBackgroundImage(imageUrl);
-            alert('Background image updated successfully');
-          })
-          .catch(error => {
-            console.error("Error saving background image:", error);
-            alert('Error saving background image: ' + error.message);
-          });
-        } catch (error) {
-          console.error("Error accessing Firestore:", error);
-          alert('Error accessing database: ' + error.message);
-        }
-      }
-    });
-  } else {
-    console.error("Apply button not found");
-  }
-  
-  // Remove background image
-  const removeButton = document.getElementById('remove-bg');
-  if (removeButton) {
-    removeButton.addEventListener('click', () => {
-      try {
-        // Remove from Firestore
-        db.collection('settings').doc('appearance').update({
-          backgroundImage: firebase.firestore.FieldValue.delete()
-        })
-        .then(() => {
-          document.body.style.backgroundImage = '';
-          document.body.classList.remove('with-bg-image');
-          const bgUrlInput = document.getElementById('bg-image-url');
-          if (bgUrlInput) {
-            bgUrlInput.value = '';
-          }
-          alert('Background image removed');
-        })
-        .catch(error => {
-          console.error("Error removing background image:", error);
-          alert('Error removing background image: ' + error.message);
-        });
-      } catch (error) {
-        console.error("Error accessing Firestore:", error);
-        alert('Error accessing database: ' + error.message);
-      }
-    });
-  } else {
-    console.error("Remove button not found");
-  }
-  
-  // Allow pressing Enter to apply background
-  const bgUrlInput = document.getElementById('bg-image-url');
-  if (bgUrlInput) {
-    bgUrlInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        const applyButton = document.getElementById('apply-bg');
-        if (applyButton) {
-          applyButton.click();
-        }
-      }
-    });
-  }
-  
-  // Save minimized state in localStorage
-  controls.addEventListener('transitionend', () => {
-    localStorage.setItem('bgControlsMinimized', controls.classList.contains('minimized'));
-  });
-  
-  // Check if it was previously minimized
-  const wasMinimized = localStorage.getItem('bgControlsMinimized') === 'true';
-  if (wasMinimized) {
-    controls.classList.add('minimized');
-    const minimizeButton = document.getElementById('minimize-bg-controls');
-    if (minimizeButton) {
-      minimizeButton.textContent = '□';
-    }
-  }
-  
-  console.log("Background controls created successfully");
-}
-
 
   
   
@@ -1211,5 +964,4 @@ function checkDarkModePreference() {
 
 // Call dark mode check on page load
 checkDarkModePreference();
-
 
