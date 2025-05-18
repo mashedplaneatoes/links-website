@@ -427,8 +427,8 @@ window.approveSuggestion = function(suggestionId) {
         password: null,
         visible: true,
         folder: null,
-                subfolder: null,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        subfolder: null,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
       })
       .then(() => {
         // Delete the suggestion
