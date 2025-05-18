@@ -121,17 +121,18 @@ document.addEventListener('DOMContentLoaded', () => {
             renderFolderContents(folder, folderContent);
           }
           
-          // Toggle folder content visibility when header is clicked
-          folderHeader.addEventListener('click', () => {
+          // Toggle ONLY THIS folder's content visibility when header is clicked
+          folderHeader.addEventListener('click', (e) => {
             // Only toggle if unlocked or no password
+            const thisContent = folderHeader.nextElementSibling;
+            const thisArrow = folderHeader.querySelector('.folder-arrow');
+            
             if (!isLocked || unlockedFolders.has(folder.name)) {
-              folderContent.classList.toggle('hidden');
-              const arrow = folderHeader.querySelector('.folder-arrow');
-              arrow.textContent = folderContent.classList.contains('hidden') ? '▶' : '▼';
+              thisContent.classList.toggle('hidden');
+              thisArrow.textContent = thisContent.classList.contains('hidden') ? '▶' : '▼';
             } else {
-              folderContent.classList.toggle('hidden');
-              const arrow = folderHeader.querySelector('.folder-arrow');
-              arrow.textContent = folderContent.classList.contains('hidden') ? '▶' : '▼';
+              thisContent.classList.toggle('hidden');
+              thisArrow.textContent = thisContent.classList.contains('hidden') ? '▶' : '▼';
             }
           });
           
@@ -213,12 +214,16 @@ document.addEventListener('DOMContentLoaded', () => {
         subfolderContent.appendChild(linkElement);
       });
       
-      // Toggle subfolder content visibility when header is clicked
+      // Toggle ONLY THIS subfolder's content visibility when header is clicked
       subfolderHeader.addEventListener('click', (e) => {
         e.stopPropagation(); // Prevent triggering parent folder toggle
-        subfolderContent.classList.toggle('hidden');
-        const arrow = subfolderHeader.querySelector('.subfolder-arrow');
-        arrow.textContent = subfolderContent.classList.contains('hidden') ? '▶' : '▼';
+        
+        // Get THIS specific subfolder's content and arrow
+        const thisSubfolderContent = subfolderHeader.nextElementSibling;
+        const thisSubfolderArrow = subfolderHeader.querySelector('.subfolder-arrow');
+        
+        thisSubfolderContent.classList.toggle('hidden');
+        thisSubfolderArrow.textContent = thisSubfolderContent.classList.contains('hidden') ? '▶' : '▼';
       });
       
       subfolderElement.appendChild(subfolderHeader);
