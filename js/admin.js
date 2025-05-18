@@ -10,6 +10,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const tabButtons = document.querySelectorAll('.tab-button');
   const tabContents = document.querySelectorAll('.tab-content');
   
+  console.log("Admin.js loaded");
+  console.log("Login form exists:", !!loginForm);
+  console.log("Admin login section exists:", !!adminLogin);
+  console.log("Admin panel exists:", !!adminPanel);
+  
   // Hide error message initially
   if (loginError) {
     loginError.classList.add('hidden');
@@ -96,29 +101,34 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   // Handle tab switching
-  tabButtons.forEach(button => {
-    button.addEventListener('click', () => {
-      // Remove active class from all buttons
-      tabButtons.forEach(btn => btn.classList.remove('active'));
-      
-      // Add active class to clicked button
-      button.classList.add('active');
-      
-      // Hide all tab contents
-      tabContents.forEach(content => content.classList.add('hidden'));
-      
-      // Show selected tab content
-      const tabId = button.getAttribute('data-tab');
-      document.getElementById(tabId).classList.remove('hidden');
-      
-      // Load data for the tab if needed
-      if (tabId === 'manage-links') {
-        loadLinks();
-      } else if (tabId === 'review-suggestions') {
-        loadSuggestions();
-      }
+  if (tabButtons) {
+    tabButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        // Remove active class from all buttons
+        tabButtons.forEach(btn => btn.classList.remove('active'));
+        
+        // Add active class to clicked button
+        button.classList.add('active');
+        
+        // Hide all tab contents
+        tabContents.forEach(content => content.classList.add('hidden'));
+        
+        // Show selected tab content
+        const tabId = button.getAttribute('data-tab');
+        const tabContent = document.getElementById(tabId);
+        if (tabContent) {
+          tabContent.classList.remove('hidden');
+        }
+        
+        // Load data for the tab if needed
+        if (tabId === 'manage-links') {
+          loadLinks();
+        } else if (tabId === 'review-suggestions') {
+          loadSuggestions();
+        }
+      });
     });
-  });
+  }
   
   // Handle adding a new link
   if (addLinkForm) {
@@ -252,209 +262,212 @@ document.addEventListener('DOMContentLoaded', () => {
       suggestionsList.innerHTML = '<p class="error-message">Error loading suggestions. Please try again.</p>';
     }
   }
-  
-  // Function to edit a link
-  window.editLink = function(linkId) {
-    if (!isAdmin) return;
-    
-    // Find the list item using a more reliable method
-    const editButton = document.querySelector(`button.edit-button[onclick*="${linkId}"]`);
-    if (!editButton) return;
-    
-    const listItem = editButton.closest('.admin-list-item');
-    if (!listItem) return;
-    
-    db.collection('links').doc(linkId).get()
-      .then(doc => {
-        if (!doc.exists) {
-          alert('Link not found');
-          return;
-        }
-        
-        const link = doc.data();
-        
-        // Create edit form
-        const editForm = document.createElement('div');
-        editForm.className = 'edit-form';
-        editForm.innerHTML = `
-          <div class="form-group">
-            <label for="edit-name-${linkId}">Name:</label>
-            <input type="text" id="edit-name-${linkId}" value="${link.name}" required>
-          </div>
-          <div class="form-group">
-            <label for="edit-url-${linkId}">URL:</label>
-            <input type="url" id="edit-url-${linkId}" value="${link.url}" required>
-          </div>
-          <div class="form-group">
-            <label for="edit-password-${linkId}">Password:</label>
-            <input type="text" id="edit-password-${linkId}" value="${link.password || ''}">
-          </div>
-          <div class="form-group">
-            <label for="edit-folder-${linkId}">Folder:</label>
-            <input type="text" id="edit-folder-${linkId}" value="${link.folder || ''}">
-          </div>
-          <div class="form-group">
-            <label for="edit-subfolder-${linkId}">Subfolder:</label>
-            <input type="text" id="edit-subfolder-${linkId}" value="${link.subfolder || ''}">
-          </div>
-          <div class="form-group checkbox">
-            <input type="checkbox" id="edit-visible-${linkId}" ${link.visible ? 'checked' : ''}>
-            <label for="edit-visible-${linkId}">Visible</label>
-          </div>
-          <button type="button" onclick="saveLink('${linkId}')">Save</button>
-          <button type="button" onclick="cancelEdit('${linkId}')">Cancel</button>
-        `;
-        
-        // Add edit form to list item
-        listItem.appendChild(editForm);
-        
-        // Hide the action buttons
-        const actionButtons = listItem.querySelector('.admin-actions');
-        if (actionButtons) {
-          actionButtons.style.display = 'none';
-        }
-      })
-      .catch(error => {
-        console.error("Error getting link:", error);
-        alert('Error getting link details. Please try again.');
-      });
-  };
-  
-  // Function to save edited link
-  window.saveLink = function(linkId) {
-    if (!isAdmin) return;
-    
-    const name = document.getElementById(`edit-name-${linkId}`).value.trim();
-    const url = document.getElementById(`edit-url-${linkId}`).value.trim();
-    const password = document.getElementById(`edit-password-${linkId}`).value.trim();
-    const visible = document.getElementById(`edit-visible-${linkId}`).checked;
-    const folder = document.getElementById(`edit-folder-${linkId}`).value.trim();
-    const subfolder = document.getElementById(`edit-subfolder-${linkId}`).value.trim();
-    
-    if (!name || !url) {
-      alert('Name and URL are required');
-      return;
-    }
-    
-    db.collection('links').doc(linkId).update({
-      name,
-      url,
-      password: password || null,
-      visible,
-      folder: folder || null,
-      subfolder: subfolder || null,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    })
-    .then(() => {
-      loadLinks();
-    })
-    .catch(error => {
-      console.error("Error updating link:", error);
-      alert('Error updating link. Please try again.');
-    });
-  };
-  
-  // Function to cancel edit
-  window.cancelEdit = function(linkId) {
-    // Find the save button and get the list item
-    const saveButton = document.querySelector(`button[onclick*="saveLink('${linkId}')"]`);
-    if (!saveButton) return;
-    
-    const listItem = saveButton.closest('.admin-list-item');
-    if (!listItem) return;
-    
-    // Remove edit form
-    const editForm = listItem.querySelector('.edit-form');
-    if (editForm) {
-      editForm.remove();
-    }
-    
-    // Show action buttons
-    const actionButtons = listItem.querySelector('.admin-actions');
-    if (actionButtons) {
-      actionButtons.style.display = 'flex';
-    }
-  };
-  
-  // Function to delete a link
-  window.deleteLink = function(linkId) {
-    if (!isAdmin) return;
-    
-    if (!confirm('Are you sure you want to delete this link?')) {
-      return;
-    }
-    
-    db.collection('links').doc(linkId).delete()
-      .then(() => {
-        loadLinks();
-      })
-      .catch(error => {
-        console.error("Error deleting link:", error);
-        alert('Error deleting link. Please try again.');
-      });
-  };
-  
-  // Function to approve a suggestion
-  window.approveSuggestion = function(suggestionId) {
-    if (!isAdmin) return;
-    
-    db.collection('suggestions').doc(suggestionId).get()
-      .then(doc => {
-        if (!doc.exists) {
-          alert('Suggestion not found');
-          return;
-        }
-        
-        const suggestion = doc.data();
-        
-        // Add to links collection
-        return db.collection('links').add({
-          name: suggestion.name,
-          url: suggestion.url,
-          password: null,
-          visible: true,
-          folder: null,
-          subfolder: null,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        })
-        .then(() => {
-          // Delete the suggestion
-          return db.collection('suggestions').doc(suggestionId).delete();
-        })
-        .then(() => {
-          loadLinks();
-          loadSuggestions();
-          alert('Suggestion approved and added to links');
-        });
-      })
-      .catch(error => {
-        console.error("Error approving suggestion:", error);
-        alert('Error approving suggestion. Please try again.');
-      });
-  };
-    // Function to delete a suggestion
-  window.deleteSuggestion = function(suggestionId) {
-    if (!isAdmin) return;
-    
-    if (!confirm('Are you sure you want to delete this suggestion?')) {
-      return;
-    }
-    
-    db.collection('suggestions').doc(suggestionId).delete()
-      .then(() => {
-        loadSuggestions();
-      })
-      .catch(error => {
-        console.error("Error deleting suggestion:", error);
-        alert('Error deleting suggestion. Please try again.');
-      });
-  };
-
-  // Add console logs to help debug
-  console.log("Admin.js loaded");
-  console.log("Login form exists:", !!loginForm);
-  console.log("Admin login section exists:", !!adminLogin);
-  console.log("Admin panel exists:", !!adminPanel);
 });
 
+// Global functions for link and suggestion management
+window.editLink = function(linkId) {
+  if (!document.querySelector('.admin-panel:not(.hidden)')) return;
   
+  const editButton = document.querySelector(`button.edit-button[onclick*="${linkId}"]`);
+  if (!editButton) return;
+  
+  const listItem = editButton.closest('.admin-list-item');
+  if (!listItem) return;
+  
+  db.collection('links').doc(linkId).get()
+    .then(doc => {
+      if (!doc.exists) {
+        alert('Link not found');
+        return;
+      }
+      
+      const link = doc.data();
+      
+      // Create edit form
+      const editForm = document.createElement('div');
+      editForm.className = 'edit-form';
+      editForm.innerHTML = `
+        <div class="form-group">
+          <label for="edit-name-${linkId}">Name:</label>
+          <input type="text" id="edit-name-${linkId}" value="${link.name}" required>
+        </div>
+        <div class="form-group">
+          <label for="edit-url-${linkId}">URL:</label>
+          <input type="url" id="edit-url-${linkId}" value="${link.url}" required>
+        </div>
+        <div class="form-group">
+          <label for="edit-password-${linkId}">Password:</label>
+          <input type="text" id="edit-password-${linkId}" value="${link.password || ''}">
+        </div>
+        <div class="form-group">
+          <label for="edit-folder-${linkId}">Folder:</label>
+          <input type="text" id="edit-folder-${linkId}" value="${link.folder || ''}">
+        </div>
+        <div class="form-group">
+          <label for="edit-subfolder-${linkId}">Subfolder:</label>
+          <input type="text" id="edit-subfolder-${linkId}" value="${link.subfolder || ''}">
+        </div>
+        <div class="form-group checkbox">
+          <input type="checkbox" id="edit-visible-${linkId}" ${link.visible ? 'checked' : ''}>
+          <label for="edit-visible-${linkId}">Visible</label>
+        </div>
+        <button type="button" onclick="saveLink('${linkId}')">Save</button>
+        <button type="button" onclick="cancelEdit('${linkId}')">Cancel</button>
+      `;
+      
+      // Add edit form to list item
+      listItem.appendChild(editForm);
+      
+      // Hide the action buttons
+      const actionButtons = listItem.querySelector('.admin-actions');
+      if (actionButtons) {
+        actionButtons.style.display = 'none';
+      }
+    })
+    .catch(error => {
+      console.error("Error getting link:", error);
+      alert('Error getting link details. Please try again.');
+    });
+};
+
+window.saveLink = function(linkId) {
+  if (!document.querySelector('.admin-panel:not(.hidden)')) return;
+  
+  const name = document.getElementById(`edit-name-${linkId}`).value.trim();
+  const url = document.getElementById(`edit-url-${linkId}`).value.trim();
+  const password = document.getElementById(`edit-password-${linkId}`).value.trim();
+  const visible = document.getElementById(`edit-visible-${linkId}`).checked;
+  const folder = document.getElementById(`edit-folder-${linkId}`).value.trim();
+  const subfolder = document.getElementById(`edit-subfolder-${linkId}`).value.trim();
+  
+  if (!name || !url) {
+    alert('Name and URL are required');
+    return;
+  }
+  
+  db.collection('links').doc(linkId).update({
+    name,
+    url,
+    password: password || null,
+    visible,
+    folder: folder || null,
+    subfolder: subfolder || null,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  })
+  .then(() => {
+    // Reload links by triggering the active tab
+    const activeTab = document.querySelector('.tab-button.active');
+    if (activeTab) {
+      activeTab.click();
+    }
+  })
+  .catch(error => {
+    console.error("Error updating link:", error);
+    alert('Error updating link. Please try again.');
+  });
+};
+
+window.cancelEdit = function(linkId) {
+  const saveButton = document.querySelector(`button[onclick*="saveLink('${linkId}')"]`);
+  if (!saveButton) return;
+  
+  const listItem = saveButton.closest('.admin-list-item');
+  if (!listItem) return;
+  
+  // Remove edit form
+  const editForm = listItem.querySelector('.edit-form');
+  if (editForm) {
+    editForm.remove();
+  }
+  
+  // Show action buttons
+  const actionButtons = listItem.querySelector('.admin-actions');
+  if (actionButtons) {
+    actionButtons.style.display = 'flex';
+  }
+};
+
+window.deleteLink = function(linkId) {
+  if (!document.querySelector('.admin-panel:not(.hidden)')) return;
+  
+  if (!confirm('Are you sure you want to delete this link?')) {
+    return;
+  }
+  
+  db.collection('links').doc(linkId).delete()
+    .then(() => {
+      // Reload links by triggering the active tab
+      const activeTab = document.querySelector('.tab-button.active');
+      if (activeTab) {
+        activeTab.click();
+      }
+    })
+    .catch(error => {
+      console.error("Error deleting link:", error);
+      alert('Error deleting link. Please try again.');
+    });
+};
+
+window.approveSuggestion = function(suggestionId) {
+  if (!document.querySelector('.admin-panel:not(.hidden)')) return;
+  
+  db.collection('suggestions').doc(suggestionId).get()
+    .then(doc => {
+      if (!doc.exists) {
+        alert('Suggestion not found');
+        return;
+      }
+      
+      const suggestion = doc.data();
+      
+      // Add to links collection
+      return db.collection('links').add({
+        name: suggestion.name,
+        url: suggestion.url,
+        password: null,
+        visible: true,
+        folder: null,
+                subfolder: null,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      })
+      .then(() => {
+        // Delete the suggestion
+        return db.collection('suggestions').doc(suggestionId).delete();
+      })
+      .then(() => {
+        // Reload tabs
+        const activeTab = document.querySelector('.tab-button.active');
+        if (activeTab) {
+          activeTab.click();
+        }
+        alert('Suggestion approved and added to links');
+      });
+    })
+    .catch(error => {
+      console.error("Error approving suggestion:", error);
+      alert('Error approving suggestion. Please try again.');
+    });
+};
+
+window.deleteSuggestion = function(suggestionId) {
+  if (!document.querySelector('.admin-panel:not(.hidden)')) return;
+  
+  if (!confirm('Are you sure you want to delete this suggestion?')) {
+    return;
+  }
+  
+  db.collection('suggestions').doc(suggestionId).delete()
+    .then(() => {
+      // Reload suggestions by triggering the active tab
+      const activeTab = document.querySelector('.tab-button.active');
+      if (activeTab) {
+        activeTab.click();
+      }
+    })
+    .catch(error => {
+      console.error("Error deleting suggestion:", error);
+      alert('Error deleting suggestion. Please try again.');
+    });
+};
+
+        
