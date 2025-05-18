@@ -34,8 +34,14 @@ document.addEventListener('DOMContentLoaded', () => {
               folders[link.folder] = {
                 name: link.folder,
                 subfolders: {},
-                links: []
+                links: [],
+                hasPassword: !!link.password,
+                password: link.password || null
               };
+            } else if (link.password && !folders[link.folder].hasPassword) {
+              // If this link has a password and the folder doesn't have one yet, set it
+              folders[link.folder].hasPassword = true;
+              folders[link.folder].password = link.password;
             }
             
             if (link.subfolder) {
@@ -72,69 +78,29 @@ document.addEventListener('DOMContentLoaded', () => {
           const folderContent = document.createElement('div');
           folderContent.className = 'folder-content hidden';
           
-          // Add folder password protection if needed
-          const folderPassword = getFolderPassword(folder);
-          const isLocked = folderPassword && !unlockedFolders.has(folder.name);
+          // Check if folder is password protected
+          const isPasswordProtected = folder.hasPassword;
+          const isUnlocked = unlockedFolders.has(folder.name);
           
-          if (isLocked) {
-            // Create password form
-            const passwordForm = document.createElement('div');
-            passwordForm.className = 'password-form';
-            passwordForm.innerHTML = `
-              <p>This folder is password protected</p>
-              <div class="password-input-group">
-                <input type="password" class="folder-password-input" placeholder="Enter password">
-                <button type="button" class="unlock-button">Unlock</button>
-              </div>
-              <p class="password-error hidden">Incorrect password</p>
-            `;
-            
-            folderContent.appendChild(passwordForm);
-            
-            // Add unlock button event listener
-            const unlockButton = passwordForm.querySelector('.unlock-button');
-            const passwordInput = passwordForm.querySelector('.folder-password-input');
-            const passwordError = passwordForm.querySelector('.password-error');
-            
-            unlockButton.addEventListener('click', () => {
-              const enteredPassword = passwordInput.value.trim();
-              
-              if (enteredPassword === folderPassword) {
-                // Password correct, show folder contents
-                unlockedFolders.add(folder.name);
-                folderContent.innerHTML = ''; // Clear password form
-                renderFolderContents(folder, folderContent);
-              } else {
-                // Password incorrect, show error
-                passwordError.classList.remove('hidden');
-              }
-            });
-            
-            // Also allow pressing Enter to submit
-            passwordInput.addEventListener('keypress', (e) => {
-              if (e.key === 'Enter') {
-                unlockButton.click();
-              }
-            });
-          } else {
-            // No password or already unlocked, render contents directly
-            renderFolderContents(folder, folderContent);
-          }
-          
-          // Toggle ONLY THIS folder's content visibility when header is clicked
-          folderHeader.addEventListener('click', (e) => {
-            // Only toggle if unlocked or no password
+          // Toggle folder content visibility when header is clicked
+          folderHeader.addEventListener('click', () => {
             const thisContent = folderHeader.nextElementSibling;
             const thisArrow = folderHeader.querySelector('.folder-arrow');
             
-            if (!isLocked || unlockedFolders.has(folder.name)) {
-              thisContent.classList.toggle('hidden');
-              thisArrow.textContent = thisContent.classList.contains('hidden') ? '▶' : '▼';
-            } else {
-              thisContent.classList.toggle('hidden');
-              thisArrow.textContent = thisContent.classList.contains('hidden') ? '▶' : '▼';
+            thisContent.classList.toggle('hidden');
+            thisArrow.textContent = thisContent.classList.contains('hidden') ? '▶' : '▼';
+            
+            // If this is the first time opening a password-protected folder that's not unlocked,
+            // show the password form and don't render the actual content yet
+            if (isPasswordProtected && !isUnlocked && thisContent.children.length === 0) {
+              renderPasswordForm(folder, thisContent);
             }
           });
+          
+          // If the folder is already unlocked or not password protected, render its contents
+          if (!isPasswordProtected || isUnlocked) {
+            renderFolderContents(folder, folderContent);
+          }
           
           folderElement.appendChild(folderHeader);
           folderElement.appendChild(folderContent);
@@ -163,26 +129,50 @@ document.addEventListener('DOMContentLoaded', () => {
       });
   }
   
-  // Helper function to get folder password
-  function getFolderPassword(folder) {
-    // Check if any link in the folder has a password
-    const folderLinks = folder.links;
-    for (const link of folderLinks) {
-      if (link.password) {
-        return link.password;
-      }
-    }
+  // Function to render password form
+  function renderPasswordForm(folder, folderContent) {
+    // Clear any existing content
+    folderContent.innerHTML = '';
     
-    // Check subfolders
-    for (const subfolder of Object.values(folder.subfolders)) {
-      for (const link of subfolder.links) {
-        if (link.password) {
-          return link.password;
-        }
-      }
-    }
+    // Create password form
+    const passwordForm = document.createElement('div');
+    passwordForm.className = 'password-form';
+    passwordForm.innerHTML = `
+      <p>This folder is password protected</p>
+      <div class="password-input-group">
+        <input type="password" class="folder-password-input" placeholder="Enter password">
+        <button type="button" class="unlock-button">Unlock</button>
+      </div>
+      <p class="password-error hidden">Incorrect password</p>
+    `;
     
-    return null;
+    folderContent.appendChild(passwordForm);
+    
+    // Add unlock button event listener
+    const unlockButton = passwordForm.querySelector('.unlock-button');
+    const passwordInput = passwordForm.querySelector('.folder-password-input');
+    const passwordError = passwordForm.querySelector('.password-error');
+    
+    unlockButton.addEventListener('click', () => {
+      const enteredPassword = passwordInput.value.trim();
+      
+      if (enteredPassword === folder.password) {
+        // Password correct, show folder contents
+        unlockedFolders.add(folder.name);
+        folderContent.innerHTML = ''; // Clear password form
+        renderFolderContents(folder, folderContent);
+      } else {
+        // Password incorrect, show error
+        passwordError.classList.remove('hidden');
+      }
+    });
+    
+    // Also allow pressing Enter to submit
+    passwordInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        unlockButton.click();
+      }
+    });
   }
   
   // Helper function to render folder contents
