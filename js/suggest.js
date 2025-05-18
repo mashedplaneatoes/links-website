@@ -3,6 +3,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const successMessage = document.getElementById('suggestion-success');
   const errorMessage = document.getElementById('suggestion-error');
   
+  // Apply fixed background image on page load
+  applyBackgroundImage();
+  
   // Handle suggestion form submission
   suggestionForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -51,5 +54,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // Function to show success message
   function showSuccess() {
     successMessage.classList.remove('hidden');
+  }
+  
+  // Function to apply fixed background image
+  function applyBackgroundImage() {
+    // Set your fixed background image URL here
+    const fixedBackgroundUrl = 'https://your-background-image-url.jpg';
+    
+    document.body.style.backgroundImage = `url(${fixedBackgroundUrl})`;
+    document.body.classList.add('with-bg-image');
   }
 });
