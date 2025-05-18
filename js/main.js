@@ -137,7 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       
       if (!isAdmin) {
-        alert('You must be logged in as admin to add links');
+    
         return;
       }
       
@@ -164,10 +164,9 @@ document.addEventListener('DOMContentLoaded', () => {
         addLinkForm.reset();
         loadLinks();
         
-        alert('Link added successfully');
+        
       } catch (error) {
         console.error("Error adding link:", error);
-        alert('Error adding link. Please try again.');
       }
     });
   }
@@ -642,7 +641,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const imageUrl = imageUrlInput ? imageUrlInput.value.trim() : '';
       
       if (!name || !url) {
-        alert('Please enter a name and URL for your suggestion.');
+        
         return;
       }
       
@@ -659,11 +658,11 @@ document.addEventListener('DOMContentLoaded', () => {
         suggestionForm.reset();
         
         // Show success message
-        alert('Thank you for your suggestion! It will be reviewed by the admin.');
+        
       })
       .catch(error => {
         console.error('Error adding suggestion:', error);
-        alert('Error submitting suggestion. Please try again later.');
+        
       });
     });
   }
@@ -679,7 +678,7 @@ document.addEventListener('DOMContentLoaded', () => {
     db.collection('links').doc(linkId).get()
       .then(doc => {
         if (!doc.exists) {
-          alert('Link not found');
+          
           return;
         }
         
@@ -740,7 +739,7 @@ document.addEventListener('DOMContentLoaded', () => {
       })
       .catch(error => {
         console.error("Error getting link:", error);
-        alert('Error getting link details. Please try again.');
+        
       });
   }
   
@@ -756,7 +755,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const visible = document.getElementById(`edit-visible-${linkId}`).checked;
     
     if (!name || !url) {
-      alert('Name and URL are required');
+      
       return;
     }
     
@@ -774,7 +773,7 @@ document.addEventListener('DOMContentLoaded', () => {
     })
     .catch(error => {
       console.error("Error updating link:", error);
-      alert('Error updating link. Please try again.');
+      
     });
   }
   
@@ -811,7 +810,7 @@ document.addEventListener('DOMContentLoaded', () => {
       })
       .catch(error => {
         console.error("Error deleting link:", error);
-        alert('Error deleting link. Please try again.');
+        
       });
   }
   
@@ -822,7 +821,7 @@ document.addEventListener('DOMContentLoaded', () => {
     db.collection('suggestions').doc(suggestionId).get()
       .then(doc => {
         if (!doc.exists) {
-          alert('Suggestion not found');
+          
           return;
         }
         
@@ -843,12 +842,12 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(() => {
           loadLinks();
           loadSuggestions();
-          alert('Suggestion approved and added to links');
+          
         });
       })
       .catch(error => {
         console.error("Error approving suggestion:", error);
-        alert('Error approving suggestion. Please try again.');
+        
       });
   }
   
@@ -866,7 +865,8 @@ document.addEventListener('DOMContentLoaded', () => {
       })
       .catch(error => {
         console.error("Error deleting suggestion:", error);
-        alert('Error deleting suggestion. Please try again.');
+
+      
       });
   }
   
