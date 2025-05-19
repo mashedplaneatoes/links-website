@@ -614,7 +614,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function applyBackgroundImage() {
   // Set your fixed background image URL here
-  const fixedBackgroundUrl = 'https://wallpaperaccess.com/full/2122654.jpg';
+  const fixedBackgroundUrl = 'https://i.redd.it/1asyzovvrn8a1.gif';
   
   // Apply the fixed background image
   document.body.style.backgroundImage = `url(${fixedBackgroundUrl})`;
